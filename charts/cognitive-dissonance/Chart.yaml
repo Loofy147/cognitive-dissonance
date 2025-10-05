@@ -1,0 +1,5 @@
+apiVersion: v2
+name: cognitive-dissonance
+description: Helm chart for Self-Cognitive-Dissonance System
+version: 0.1.0
+appVersion: "1.0"

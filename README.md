@@ -1,58 +1,35 @@
-# Self-Cognitive Dissonance System
+# Self-Cognitive-Dissonance System — POC
 
-This repository contains the source code for a "Self-Cognitive Dissonance System," an MLOps platform designed to improve the robustness and reliability of machine learning models through controlled, internal conflict.
+This repository contains a runnable POC of the Self-Cognitive-Dissonance System (multi-service). It includes:
+- proposer, critic, evaluator, learner, meta-controller, safety-gate services (FastAPI)
+- docker-compose for local development
+- Prometheus metrics endpoints, health/readiness
+- MLflow + MinIO compose for model artifact management (optional)
+- Helm skeleton for K8s productionization
+- GitHub Actions CI: lint, tests, build
 
-## Overview
+## Quickstart (local)
+1. Copy `.env.example` to `.env` and edit if needed.
+2. Build & run:
 
-The system is built around the concept of "dissonance," where a pool of "Proposer" models generates predictions, and a "Critic" component challenges these proposals by creating contradictory scenarios. An "Evaluator" measures the level of dissonance, and a "Meta-Controller" uses this signal to guide the learning process, ensuring that the models improve without compromising production safety.
+```bash
+docker-compose build --pull
+docker-compose up --build
 
-This project is structured as a collection of microservices and components managed via Docker Compose for local development and designed for deployment on Kubernetes in production.
+3. Watch logs:
 
-## Project Structure
 
-- `services/`: Contains the core API services, including the `meta-controller`.
-- `models/`: Contains the "Proposer" models and their training/inference scripts.
-- `critic/`: Contains the logic for the "Critic" or contradiction generator.
-- `evaluator/`: Contains the sandbox environment for evaluating dissonance.
-- `infra/`: Holds infrastructure-as-code, such as `docker-compose.yml` and Kubernetes manifests.
-- `mlops/`: Tooling for model and data versioning, tracking, and drift detection (e.g., MLflow).
-- `tests/`: Unit, integration, and end-to-end tests.
-- `docs/`: Project documentation, including Architecture Decision Records (ADRs).
 
-## Getting Started (Local Development)
+docker-compose logs -f evaluator proposer critic learner meta-controller safety-gate
 
-### Prerequisites
+Running tests
 
-- Docker
-- Docker Compose
+pytest -q
 
-### Running the System
+Next steps
 
-1.  **Build and start the services:**
-    ```bash
-    docker-compose -f infra/docker-compose.yml build
-    docker-compose -f infra/docker-compose.yml up
-    ```
+Integrate MLflow and MinIO for model lifecycle (see mlops/)
 
-2.  **Interact with the Meta-Controller API:**
-    - The API will be available at `http://localhost:8000`.
-    - You can view the OpenAPI documentation at `http://localhost:8000/docs`.
+Convert compose to Helm & deploy to Kubernetes
 
-3.  **Check the logs:**
-    ```bash
-    docker-compose -f infra/docker-compose.yml logs -f <service_name>
-    ```
-    (e.g., `meta-controller`, `proposer`, `critic`)
-
-## High-Level Architecture
-
-The system consists of the following key components:
-
-- **Meta-Controller:** The central brain, managing policies and deployment strategies.
-- **Proposer Pool:** A set of diverse ML models making predictions.
-- **Critic Generator:** Creates challenges and counterfactuals.
-- **Evaluator Sandbox:** A safe environment to measure performance and dissonance.
-- **Experience Store:** A database and object store for logging all events, models, and data.
-- **Safety Gate:** A set of automated rules to prevent harmful model updates.
-
-For more details, refer to the architecture documents in the `docs/` directory.
+Add additional Red-team adversarial testcases
