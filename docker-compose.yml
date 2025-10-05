@@ -1,0 +1,92 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - meta_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+    ports:
+      - 9000:9000
+      - 9001:9001
+    volumes:
+      - minio_data:/data
+
+  proposer:
+    build:
+      context: .
+      dockerfile: services/proposer/Dockerfile
+    env_file: ./.env
+    ports:
+      - 8001:8000
+    depends_on:
+      - postgres
+
+  critic:
+    build:
+      context: .
+      dockerfile: services/critic/Dockerfile
+    env_file: ./.env
+    ports:
+      - 8002:8000
+    depends_on:
+      - proposer
+
+  evaluator:
+    build:
+      context: .
+      dockerfile: services/evaluator/Dockerfile
+    env_file: ./.env
+    ports:
+      - 8003:8000
+    depends_on:
+      - proposer
+      - critic
+      - learner
+
+  learner:
+    build:
+      context: .
+      dockerfile: services/learner/Dockerfile
+    env_file: ./.env
+    ports:
+      - 8004:8000
+    depends_on:
+      - postgres
+
+  meta-controller:
+    build:
+      context: .
+      dockerfile: services/meta_controller/Dockerfile
+    env_file: ./.env
+    ports:
+      - 8005:8000
+    depends_on:
+      - postgres
+
+  safety-gate:
+    build:
+      context: .
+      dockerfile: services/safety_gate/Dockerfile
+    env_file: ./.env
+    ports:
+      - 8006:8000
+    depends_on:
+      - meta-controller
+
+volumes:
+  meta_db_data:
+  minio_data:
