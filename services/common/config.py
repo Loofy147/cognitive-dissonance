@@ -20,3 +20,6 @@ MAX_DISSONANCE = float(os.getenv("MAX_DISSONANCE", 0.5))
 # Model Paths
 PROPOSER_MODEL_PATH = os.getenv("PROPOSER_MODEL_PATH", "/app/models/proposer.pkl")
 CRITIC_MODEL_PATH = os.getenv("CRITIC_MODEL_PATH", "/app/models/critic.pkl")
+
+# Evaluator
+EVALUATOR_LOOP_TIMEOUT_SECONDS = float(os.getenv("EVALUATOR_LOOP_TIMEOUT_SECONDS", 30.0))
