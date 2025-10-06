@@ -23,3 +23,13 @@ CRITIC_MODEL_PATH = os.getenv("CRITIC_MODEL_PATH", "/app/models/critic.pkl")
 
 # Evaluator
 EVALUATOR_LOOP_TIMEOUT_SECONDS = float(os.getenv("EVALUATOR_LOOP_TIMEOUT_SECONDS", 30.0))
+
+# Health check URLs for the auditor
+HEALTH_CHECK_URLS = {
+    "proposer": "http://proposer:8000/health",
+    "critic": "http://critic:8000/health",
+    "evaluator": "http://evaluator:8000/health",
+    "learner": "http://learner:8000/health",
+    "meta-controller": "http://meta-controller:8000/health",
+    "safety-gate": "http://safety-gate:8000/health",
+}
