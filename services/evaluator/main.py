@@ -25,6 +25,17 @@ async def add_metrics(request: Request, call_next):
 def health():
     return {'status': 'ok'}
 
+@app.get('/config')
+def get_config():
+    """Returns non-sensitive service configuration."""
+    return {
+        "proposer_url": config.PROPOSER_URL,
+        "critic_url": config.CRITIC_URL,
+        "learner_url": config.LEARNER_URL,
+        "safety_gate_url": config.SAFETY_URL,
+        "loop_timeout_seconds": config.EVALUATOR_LOOP_TIMEOUT_SECONDS
+    }
+
 @app.post('/run_once')
 async def run_once():
     # One iteration orchestration for testing

@@ -25,6 +25,12 @@ async def add_metrics(request: Request, call_next):
 def health():
     return {'status': 'ok'}
 
+@app.get('/config')
+def get_config():
+    """Returns non-sensitive service configuration."""
+    # This service currently has no specific configuration to expose.
+    return {}
+
 @app.post('/update')
 async def update(payload: UpdatePayload):
     try:
