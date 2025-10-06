@@ -110,6 +110,16 @@ services:
     depends_on:
       - meta-controller
 
+  auditor:
+    build:
+      context: .
+      dockerfile: services/auditor/Dockerfile
+    env_file: ./.env
+    volumes:
+      - ./services/models:/app/models
+    ports:
+      - 8007:8000
+
 volumes:
   meta_db_data:
   minio_data:
