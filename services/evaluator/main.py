@@ -7,7 +7,7 @@ import logging
 import asyncio
 import numpy as np
 from services.common.logging_config import configure_logging
-from services.common.metrics import instrument_request
+from services.common.metrics import instrument_request, EVALUATION_LOOP_TIMEOUTS_TOTAL
 from fastapi import Request
 from services.common import config
 
@@ -67,6 +67,7 @@ async def evaluation_loop():
             await asyncio.wait_for(run_once(), timeout=30.0)
         except asyncio.TimeoutError:
             logger.warning('run_once call timed out after 30 seconds.')
+            EVALUATION_LOOP_TIMEOUTS_TOTAL.labels(service=SERVICE_NAME).inc()
         except Exception as e:
             logger.exception('loop error')
         # Wait for 2 seconds before the next iteration
