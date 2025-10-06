@@ -63,7 +63,10 @@ async def evaluation_loop():
     """The main evaluation loop running in the background."""
     while True:
         try:
-            await run_once()
+            # Add a 30-second timeout to each orchestration cycle
+            await asyncio.wait_for(run_once(), timeout=30.0)
+        except asyncio.TimeoutError:
+            logger.warning('run_once call timed out after 30 seconds.')
         except Exception as e:
             logger.exception('loop error')
         # Wait for 2 seconds before the next iteration
