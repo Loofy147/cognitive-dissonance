@@ -51,16 +51,20 @@ async def contradict(payload: ContradictPayload):
         cp0 = min(0.99, 1.0 - p0 + 0.05)
     else:
         try:
-            # Convert features dict to a numpy array, assuming ordered keys
-            feature_values = [payload.features[k] for k in sorted(payload.features.keys())]
+            # The model was trained on features in a specific order. We must enforce that order.
+            ordered_feature_names = ['f1', 'f2']
+            feature_values = [payload.features[k] for k in ordered_feature_names]
             features_array = np.array(feature_values).reshape(1, -1)
 
             # Get critic's probability distribution
             critic_probabilities = model.predict_proba(features_array)[0]
             cp0 = critic_probabilities[0]
+        except KeyError as e:
+            logger.error(f"Missing feature in payload: {e}")
+            raise HTTPException(status_code=400, detail=f"Missing required feature: {e}")
         except Exception as e:
             logger.error(f"Critic prediction failed: {e}")
-            raise HTTPException(status_code=400, detail=f"Error processing features for critic: {e}")
+            raise HTTPException(status_code=500, detail=f"Error during critic prediction: {e}")
 
     cp1 = 1.0 - cp0
 

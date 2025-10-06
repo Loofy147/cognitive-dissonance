@@ -4,6 +4,7 @@ import uvicorn
 import pickle
 import numpy as np
 import logging
+import sys
 from services.common.metrics import instrument_request
 from services.common.logging_config import configure_logging
 from services.common import config
@@ -14,16 +15,15 @@ logger = logging.getLogger('proposer')
 app = FastAPI()
 SERVICE_NAME = 'proposer'
 
-# Load the model at startup
+# Load the model at startup, and fail fast if it's not available.
 try:
     with open(config.PROPOSER_MODEL_PATH, 'rb') as f:
         model = pickle.load(f)
     logger.info(f"Model loaded successfully from {config.PROPOSER_MODEL_PATH}")
     model_version = 'proposer-v2-sklearn'
 except (FileNotFoundError, IOError, pickle.UnpicklingError) as e:
-    logger.error(f"Failed to load model: {e}")
-    model = None
-    model_version = 'proposer-v1-fallback'
+    logger.critical(f"Failed to load model: {e}. Service cannot start.")
+    sys.exit(1) # Fail fast
 
 class Input(BaseModel):
     input_id: str
@@ -36,16 +36,17 @@ async def add_metrics(request: Request, call_next):
 
 @app.get('/health')
 def health():
+    # If the model failed to load, the service would have already exited.
+    # So, if we reach here, the service is healthy.
     return {'status': 'ok'}
 
 @app.post('/predict')
 async def predict(item: Input):
-    if model is None:
-        raise HTTPException(status_code=500, detail="Model not loaded")
-
+    # The fail-fast on startup removes the need to check if the model is None.
     try:
-        # Convert features dict to a numpy array, assuming ordered keys
-        feature_values = [item.features[k] for k in sorted(item.features.keys())]
+        # Enforce a canonical feature order to prevent incorrect predictions.
+        ordered_feature_names = ['f1', 'f2']
+        feature_values = [item.features[k] for k in ordered_feature_names]
         features_array = np.array(feature_values).reshape(1, -1)
 
         # Get probability distribution
@@ -59,9 +60,12 @@ async def predict(item: Input):
             'predictions': [{'class': 'A', 'p': p0}, {'class': 'B', 'p': p1}],
             'model_version': model_version
         }
+    except KeyError as e:
+        logger.error(f"Missing feature in payload: {e}")
+        raise HTTPException(status_code=400, detail=f"Missing required feature: {e}")
     except Exception as e:
         logger.error(f"Prediction failed: {e}")
-        raise HTTPException(status_code=400, detail=f"Error processing features: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error during prediction: {e}")
 
 if __name__ == '__main__':
     uvicorn.run(app, host='0.0.0.0', port=8000)
