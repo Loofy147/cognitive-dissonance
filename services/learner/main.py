@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import uvicorn
 import logging
@@ -27,9 +27,17 @@ def health():
 
 @app.post('/update')
 async def update(payload: UpdatePayload):
-    # placeholder: compute simple loss and 'apply' update
-    p = payload.proposal['predictions'][0]['p']
-    cp = payload.contradiction['contradictory'][0]['p']
+    try:
+        # Safely access nested data
+        p = payload.proposal.get('predictions', [])[0]['p']
+        cp = payload.contradiction.get('contradictory', [])[0]['p']
+        input_id = payload.proposal.get('input_id')
+    except (IndexError, KeyError) as e:
+        logger.error(f"Malformed payload received. Missing key or empty list. Details: {e}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Malformed payload. Missing key or empty list. Details: {e}"
+        )
 
     # example loss: squared diff, which is the squared dissonance
     loss = (p - cp)**2
@@ -39,7 +47,7 @@ async def update(payload: UpdatePayload):
     # For now, we just log it.
     logger.info({
         'event': 'update',
-        'input_id': payload.proposal.get('input_id'),
+        'input_id': input_id,
         'loss': loss,
         'features': payload.features
     })
