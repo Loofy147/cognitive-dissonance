@@ -34,6 +34,11 @@ def _load_policy():
 def _save_policy(policy_data: dict):
     """Saves policy to JSON file."""
     try:
+        # Ensure the parent directory exists before writing the file.
+        policy_dir = os.path.dirname(config.POLICY_FILE_PATH)
+        if policy_dir:
+            os.makedirs(policy_dir, exist_ok=True)
+
         with open(config.POLICY_FILE_PATH, 'w') as f:
             json.dump(policy_data, f, indent=4)
             logger.info(f"Policy saved to {config.POLICY_FILE_PATH}")
