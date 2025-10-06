@@ -40,6 +40,14 @@ def health():
     # So, if we reach here, the service is healthy.
     return {'status': 'ok'}
 
+@app.get('/config')
+def get_config():
+    """Returns non-sensitive service configuration."""
+    return {
+        "model_path": config.PROPOSER_MODEL_PATH,
+        "model_version": model_version
+    }
+
 @app.post('/predict')
 async def predict(item: Input):
     # The fail-fast on startup removes the need to check if the model is None.

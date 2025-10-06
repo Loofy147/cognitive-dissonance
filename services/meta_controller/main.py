@@ -57,6 +57,17 @@ async def add_metrics(request: Request, call_next):
 def health():
     return {'status':'ok'}
 
+@app.get('/config')
+def get_config():
+    """Returns non-sensitive service configuration."""
+    return {
+        "policy_file_path": config.POLICY_FILE_PATH,
+        "d_target": config.D_TARGET,
+        "lambda_max": config.LAMBDA_MAX,
+        "kl_eps": config.KL_EPS,
+        "d_budget_per_hour": config.D_BUDGET_PER_HOUR,
+    }
+
 @app.get('/policy')
 async def get_policy():
     return policy

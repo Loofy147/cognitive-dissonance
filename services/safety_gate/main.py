@@ -27,6 +27,13 @@ async def add_metrics(request: Request, call_next):
 def health():
     return {'status': 'ok'}
 
+@app.get('/config')
+def get_config():
+    """Returns non-sensitive service configuration."""
+    return {
+        "max_dissonance": config.MAX_DISSONANCE
+    }
+
 @app.post('/check')
 async def check(c: Contradiction):
     # simple safety rule: if dissonance extremely high, block

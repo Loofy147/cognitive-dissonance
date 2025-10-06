@@ -40,6 +40,14 @@ async def add_metrics(request: Request, call_next):
 def health():
     return {'status': 'ok'}
 
+@app.get('/config')
+def get_config():
+    """Returns non-sensitive service configuration."""
+    return {
+        "model_path": config.CRITIC_MODEL_PATH,
+        "model_version": model_version
+    }
+
 @app.post('/contradict')
 async def contradict(payload: ContradictPayload):
     # Original proposer's prediction

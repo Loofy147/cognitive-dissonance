@@ -33,3 +33,13 @@ HEALTH_CHECK_URLS = {
     "meta-controller": "http://meta-controller:8000/health",
     "safety-gate": "http://safety-gate:8000/health",
 }
+
+# Configuration check URLs for the auditor
+CONFIG_URLS = {
+    "proposer": "http://proposer:8000/config",
+    "critic": "http://critic:8000/config",
+    "evaluator": "http://evaluator:8000/config",
+    "learner": "http://learner:8000/config",
+    "meta-controller": "http://meta-controller:8000/config",
+    "safety-gate": "http://safety-gate:8000/config",
+}
