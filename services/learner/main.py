@@ -14,6 +14,7 @@ SERVICE_NAME='learner'
 class UpdatePayload(BaseModel):
     proposal: dict
     contradiction: dict
+    features: dict
 
 @app.middleware("http")
 async def add_metrics(request: Request, call_next):
@@ -29,10 +30,21 @@ async def update(payload: UpdatePayload):
     # placeholder: compute simple loss and 'apply' update
     p = payload.proposal['predictions'][0]['p']
     cp = payload.contradiction['contradictory'][0]['p']
-    # example loss: squared diff
+
+    # example loss: squared diff, which is the squared dissonance
     loss = (p - cp)**2
-    logger.info({'event':'update', 'loss': loss})
-    # Return a snapshot id (would be MLflow tag in real scenario)
+
+    # In a real scenario, this is where you would use the features and the loss
+    # to update the model weights (e.g., via backpropagation).
+    # For now, we just log it.
+    logger.info({
+        'event': 'update',
+        'input_id': payload.proposal.get('input_id'),
+        'loss': loss,
+        'features': payload.features
+    })
+
+    # Return a snapshot id (would be MLflow run ID or model version in a real scenario)
     return {'status':'updated', 'loss': loss, 'snapshot_id': 'snap-0001'}
 
 if __name__ == '__main__':

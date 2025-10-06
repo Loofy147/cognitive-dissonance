@@ -5,6 +5,7 @@ import logging
 from services.common.logging_config import configure_logging
 from services.common.metrics import instrument_request
 from fastapi import Request
+from services.common import config
 
 configure_logging()
 logger = logging.getLogger('safety-gate')
@@ -29,7 +30,7 @@ def health():
 @app.post('/check')
 async def check(c: Contradiction):
     # simple safety rule: if dissonance extremely high, block
-    if c.d > 0.5:
+    if c.d > config.MAX_DISSONANCE:
         logger.warning({'event':'safety_block', 'input_id': c.input_id, 'd': c.d})
         return {'allow': False, 'reason': 'dissonance_too_high'}
     return {'allow': True}

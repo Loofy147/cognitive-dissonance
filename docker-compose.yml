@@ -30,6 +30,10 @@ services:
       context: .
       dockerfile: services/proposer/Dockerfile
     env_file: ./.env
+    volumes:
+      - ./services/models:/app/models
+    environment:
+      - PROPOSER_MODEL_PATH=/app/models/proposer.pkl
     ports:
       - 8001:8000
     depends_on:
@@ -40,6 +44,10 @@ services:
       context: .
       dockerfile: services/critic/Dockerfile
     env_file: ./.env
+    volumes:
+      - ./services/models:/app/models
+    environment:
+      - CRITIC_MODEL_PATH=/app/models/critic.pkl
     ports:
       - 8002:8000
     depends_on:
@@ -50,6 +58,11 @@ services:
       context: .
       dockerfile: services/evaluator/Dockerfile
     env_file: ./.env
+    environment:
+      - PROPOSER_URL=http://proposer:8000/predict
+      - CRITIC_URL=http://critic:8000/contradict
+      - LEARNER_URL=http://learner:8000/update
+      - SAFETY_URL=http://safety-gate:8000/check
     ports:
       - 8003:8000
     depends_on:
@@ -72,6 +85,14 @@ services:
       context: .
       dockerfile: services/meta_controller/Dockerfile
     env_file: ./.env
+    volumes:
+      - ./services/policy:/data
+    environment:
+      - D_TARGET=0.12
+      - LAMBDA_MAX=0.05
+      - KL_EPS=0.02
+      - D_BUDGET_PER_HOUR=100
+      - POLICY_FILE_PATH=/data/policy.json
     ports:
       - 8005:8000
     depends_on:
@@ -82,6 +103,8 @@ services:
       context: .
       dockerfile: services/safety_gate/Dockerfile
     env_file: ./.env
+    environment:
+      - MAX_DISSONANCE=0.5
     ports:
       - 8006:8000
     depends_on:

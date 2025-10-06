@@ -1,0 +1,6 @@
+{
+    "D_target": 0.12,
+    "lambda_max": 0.05,
+    "KL_eps": 0.02,
+    "d_budget_per_hour": 100
+}
