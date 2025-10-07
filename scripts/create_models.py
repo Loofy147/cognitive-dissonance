@@ -1,16 +1,23 @@
 import pickle
 import numpy as np
-from sklearn.linear_model import LogisticRegression
+from sklearn.neural_network import MLPClassifier
+from sklearn.datasets import make_moons
 import os
 
-def create_and_save_model(model_path, C, class_weight):
-    """Trains a simple logistic regression model and saves it."""
-    # Create dummy data
-    X = np.random.rand(100, 2)
-    y = (X[:, 0] + X[:, 1] > 1).astype(int)
+def create_and_save_model(model_path, hidden_layer_sizes, activation, solver, alpha):
+    """Trains a Multi-layer Perceptron model and saves it."""
+    # Create a non-linear dataset
+    X, y = make_moons(n_samples=200, noise=0.2, random_state=42)
 
     # Train model
-    model = LogisticRegression(C=C, class_weight=class_weight)
+    model = MLPClassifier(
+        hidden_layer_sizes=hidden_layer_sizes,
+        activation=activation,
+        solver=solver,
+        alpha=alpha,
+        random_state=1,
+        max_iter=1000,
+    )
     model.fit(X, y)
 
     # Ensure the directory exists
@@ -19,20 +26,26 @@ def create_and_save_model(model_path, C, class_weight):
     # Save model
     with open(model_path, 'wb') as f:
         pickle.dump(model, f)
-    print(f"Model saved to {model_path}")
+    print(f"Model with architecture {hidden_layer_sizes} saved to {model_path}")
 
 if __name__ == "__main__":
-    # Create proposer model (a standard classifier)
+    print("Generating new MLP models based on a non-linear dataset...")
+
+    # Create proposer model (a standard MLP)
     create_and_save_model(
         "services/models/proposer.pkl",
-        C=1.0,
-        class_weight=None
+        hidden_layer_sizes=(10, 5),
+        activation='relu',
+        solver='adam',
+        alpha=1e-5
     )
 
-    # Create critic model (a slightly different classifier to create dissonance)
+    # Create critic model (a different MLP architecture to create dissonance)
     create_and_save_model(
         "services/models/critic.pkl",
-        C=0.2, # Different regularization
-        class_weight={0: 0.6, 1: 0.4} # Skewed weights
+        hidden_layer_sizes=(5, 10, 5), # Deeper but maybe less efficient
+        activation='tanh',
+        solver='adam',
+        alpha=1e-4 # More regularization
     )
-    print("Both models created successfully.")
+    print("\nBoth MLP models created successfully.")
