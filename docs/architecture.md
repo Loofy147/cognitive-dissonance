@@ -38,7 +38,7 @@ The `proposer` service is responsible for making the initial prediction.
 
 -   **Endpoint:** `/predict`
 -   **Functionality:**
-    -   Loads a pre-trained machine learning model (`proposer.pkl`) at startup.
+    -   Loads a pre-trained **MLP (Multi-layer Perceptron) neural network** model (`proposer.pkl`) at startup. This model is trained on a non-linear "two moons" dataset to handle complex patterns.
     -   Accepts an `input_id` and a dictionary of `features`.
     -   Uses the model to generate a probability distribution over two classes (A and B).
     -   Returns the prediction along with a model version.
@@ -49,7 +49,7 @@ The `critic` service challenges the `proposer`'s prediction.
 
 -   **Endpoint:** `/contradict`
 -   **Functionality:**
-    -   Loads its own pre-trained model (`critic.pkl`), which is intentionally different from the proposer's to create dissonance.
+    -   Loads its own pre-trained **MLP neural network** model (`critic.pkl`), which has a different architecture from the proposer's to ensure cognitive dissonance.
     -   Accepts the proposer's output along with the original `features`.
     -   Generates its own "contradictory" prediction based on the features.
     -   Calculates a dissonance score (`d`), which is the absolute difference between the proposer's and its own prediction.

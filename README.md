@@ -1,6 +1,6 @@
 # Self-Cognitive-Dissonance System — POC
 
-This repository contains a runnable proof-of-concept of the Self-Cognitive-Dissonance System, a microservice-based architecture for model improvement. The system has been enhanced from its original placeholder state to use pre-trained machine learning models for its core logic.
+This repository contains a runnable proof-of-concept of the Self-Cognitive-Dissonance System, a microservice-based architecture for model improvement. The system has been enhanced from its original placeholder state to use **MLP (Multi-layer Perceptron) neural networks** for its core logic, trained on a non-linear dataset to handle more complex patterns.
 
 It includes:
 -   **Services:** `proposer`, `critic`, `evaluator`, `learner`, `meta-controller`, and `safety-gate` (all FastAPI-based).
@@ -34,7 +34,7 @@ MINIO_SECRET_KEY=minioadmin
 
 ### 2. Generate Models
 
-The `proposer` and `critic` services use pre-trained models. Generate them by running the following script. First, ensure you have the required Python packages:
+The `proposer` and `critic` services use pre-trained **MLP neural network** models. Generate them by running the following script. First, ensure you have the required Python packages:
 
 ```bash
 pip install -r requirements.txt
