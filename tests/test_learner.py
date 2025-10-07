@@ -55,3 +55,38 @@ def test_learner_update_endpoint(client):
         mock_mlflow.start_run.assert_called_once()
         mock_mlflow.log_metric.assert_called_once_with("loss", ANY)
         assert mock_mlflow.set_tag.call_count == 3
+
+
+@pytest.mark.parametrize(
+    "payload, expected_detail",
+    [
+        (
+            {
+                "proposal": {"predictions": []},
+                "contradiction": {"contradictory": [{"p": 0.8}]},
+                "features": {},
+            },
+            "Invalid payload: proposal.predictions is missing or empty.",
+        ),
+        (
+            {
+                "proposal": {"predictions": [{"p": 0.6}]},
+                "contradiction": {"contradictory": []},
+                "features": {},
+            },
+            "Invalid payload: contradiction.contradictory is missing or empty.",
+        ),
+        (
+            {
+                "proposal": {"predictions": [{"p": 0.6}]},
+                "contradiction": {"contradictory": [{"p": 0.8}]},
+            },
+            "Invalid payload: features is a required field.",
+        ),
+    ],
+)
+def test_learner_update_malformed_payload(client, payload, expected_detail):
+    """Tests that the /update endpoint handles malformed payloads gracefully."""
+    response = client.post("/update", json=payload)
+    assert response.status_code == 400
+    assert response.json()["detail"] == expected_detail

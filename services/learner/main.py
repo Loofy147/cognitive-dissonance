@@ -8,6 +8,7 @@ from services.common.logging_config import configure_logging
 from services.common.metrics import instrument_request
 from services.common import config
 from fastapi import Request
+from typing import Optional
 
 configure_logging()
 logger = logging.getLogger('learner')
@@ -36,7 +37,7 @@ app = FastAPI(lifespan=lifespan)
 class UpdatePayload(BaseModel):
     proposal: dict
     contradiction: dict
-    features: dict
+    features: Optional[dict] = None
 
 @app.middleware("http")
 async def add_metrics(request: Request, call_next):
@@ -54,15 +55,27 @@ def get_config():
 
 @app.post('/update')
 async def update(payload: UpdatePayload):
+    # Manual validation to produce specific error messages as required by the new tests.
+    if payload.features is None:
+        raise HTTPException(status_code=400, detail="Invalid payload: features is a required field.")
+
+    predictions = payload.proposal.get("predictions")
+    if not predictions:
+        raise HTTPException(status_code=400, detail="Invalid payload: proposal.predictions is missing or empty.")
+
+    contradictory = payload.contradiction.get("contradictory")
+    if not contradictory:
+        raise HTTPException(status_code=400, detail="Invalid payload: contradiction.contradictory is missing or empty.")
+
     try:
-        p = payload.proposal.get('predictions', [])[0]['p']
-        cp = payload.contradiction.get('contradictory', [])[0]['p']
+        p = predictions[0]['p']
+        cp = contradictory[0]['p']
         input_id = payload.proposal.get('input_id')
-    except (IndexError, KeyError) as e:
-        logger.error(f"Malformed payload received. Missing key or empty list. Details: {e}")
+    except (KeyError, IndexError) as e:
+        logger.error(f"Malformed payload received. Missing 'p' key. Details: {e}")
         raise HTTPException(
             status_code=400,
-            detail=f"Malformed payload. Missing key or empty list. Details: {e}"
+            detail=f"Malformed payload. Missing 'p' key in predictions or contradictory."
         )
 
     loss = (p - cp)**2

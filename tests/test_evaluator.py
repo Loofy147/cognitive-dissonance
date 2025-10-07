@@ -20,7 +20,9 @@ def test_health_endpoint(client):
     """Tests that the /health endpoint is available."""
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    data = response.json()
+    assert data["status"] == "ok"
+    assert "last_run_timestamp" in data
 
 def test_config_endpoint(client):
     """Tests that the /config endpoint returns the correct configuration."""
