@@ -43,3 +43,6 @@ CONFIG_URLS = {
     "meta-controller": "http://meta-controller:8000/config",
     "safety-gate": "http://safety-gate:8000/config",
 }
+
+# MLflow
+MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")

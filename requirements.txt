@@ -10,3 +10,5 @@ pydantic==2.8.2
 requests==2.32.4
 scikit-learn==1.5.1
 pytest-httpx==0.32.0
+mlflow-skinny==2.14.1
+setuptools==70.1.1

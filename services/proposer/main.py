@@ -5,6 +5,7 @@ import pickle
 import numpy as np
 import logging
 import sys
+from contextlib import asynccontextmanager
 from services.common.metrics import instrument_request
 from services.common.logging_config import configure_logging
 from services.common import config
@@ -12,18 +13,28 @@ from services.common import config
 # Configure logging
 configure_logging()
 logger = logging.getLogger('proposer')
-app = FastAPI()
 SERVICE_NAME = 'proposer'
 
-# Load the model at startup, and fail fast if it's not available.
-try:
-    with open(config.PROPOSER_MODEL_PATH, 'rb') as f:
-        model = pickle.load(f)
-    logger.info(f"Model loaded successfully from {config.PROPOSER_MODEL_PATH}")
-    model_version = 'proposer-v2-sklearn'
-except (FileNotFoundError, IOError, pickle.UnpicklingError) as e:
-    logger.critical(f"Failed to load model: {e}. Service cannot start.")
-    sys.exit(1) # Fail fast
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Manages the application's lifespan. The model is loaded on startup.
+    This prevents the service from starting if the model is not available.
+    """
+    try:
+        with open(config.PROPOSER_MODEL_PATH, 'rb') as f:
+            app.state.model = pickle.load(f)
+        logger.info(f"Model loaded successfully from {config.PROPOSER_MODEL_PATH}")
+        app.state.model_version = 'proposer-v2-sklearn'
+    except (FileNotFoundError, IOError, pickle.UnpicklingError) as e:
+        logger.critical(f"Failed to load model: {e}. Service cannot start.")
+        sys.exit(1) # Fail fast
+    yield
+    # Clean up resources if needed on shutdown
+    app.state.model = None
+    app.state.model_version = None
+
+app = FastAPI(lifespan=lifespan)
 
 class Input(BaseModel):
     input_id: str
@@ -35,23 +46,28 @@ async def add_metrics(request: Request, call_next):
     return await call_next(request)
 
 @app.get('/health')
-def health():
-    # If the model failed to load, the service would have already exited.
+def health(request: Request):
+    # If the model failed to load, the lifespan event would have prevented startup.
     # So, if we reach here, the service is healthy.
-    return {'status': 'ok'}
+    if hasattr(request.app.state, 'model') and request.app.state.model is not None:
+        return {'status': 'ok'}
+    else:
+        raise HTTPException(status_code=503, detail="Service is unhealthy: Model not loaded.")
 
 @app.get('/config')
-def get_config():
+def get_config(request: Request):
     """Returns non-sensitive service configuration."""
     return {
         "model_path": config.PROPOSER_MODEL_PATH,
-        "model_version": model_version
+        "model_version": request.app.state.model_version
     }
 
 @app.post('/predict')
-async def predict(item: Input):
-    # The fail-fast on startup removes the need to check if the model is None.
+async def predict(item: Input, request: Request):
     try:
+        model = request.app.state.model
+        model_version = request.app.state.model_version
+
         # Enforce a canonical feature order to prevent incorrect predictions.
         ordered_feature_names = ['f1', 'f2']
         feature_values = [item.features[k] for k in ordered_feature_names]

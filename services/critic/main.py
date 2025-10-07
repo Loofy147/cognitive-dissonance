@@ -4,6 +4,8 @@ import uvicorn
 import pickle
 import numpy as np
 import logging
+import sys
+from contextlib import asynccontextmanager
 from services.common.logging_config import configure_logging
 from services.common.metrics import instrument_request, set_d_value
 from services.common import config
@@ -11,19 +13,32 @@ from services.common import config
 # Configure logging
 configure_logging()
 logger = logging.getLogger('critic')
-app = FastAPI()
 SERVICE_NAME = 'critic'
 
-# Load the model at startup
-try:
-    with open(config.CRITIC_MODEL_PATH, 'rb') as f:
-        model = pickle.load(f)
-    logger.info(f"Model loaded successfully from {config.CRITIC_MODEL_PATH}")
-    model_version = 'critic-v2-sklearn'
-except (FileNotFoundError, IOError, pickle.UnpicklingError) as e:
-    logger.error(f"Failed to load model: {e}")
-    model = None
-    model_version = 'critic-v1-fallback'
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Manages the application's lifespan. The model is loaded on startup.
+    This prevents the service from starting if the model is not available.
+    """
+    try:
+        with open(config.CRITIC_MODEL_PATH, 'rb') as f:
+            app.state.model = pickle.load(f)
+        logger.info(f"Model loaded successfully from {config.CRITIC_MODEL_PATH}")
+        app.state.model_version = 'critic-v2-sklearn'
+    except (FileNotFoundError, IOError, pickle.UnpicklingError) as e:
+        # Unlike the proposer, the original critic had fallback logic.
+        # For now, we maintain that by logging an error but not exiting.
+        # A future improvement would be to make this fail-fast as well.
+        logger.error(f"Failed to load model: {e}. Critic will use fallback logic.")
+        app.state.model = None
+        app.state.model_version = 'critic-v1-fallback'
+    yield
+    # Clean up resources on shutdown
+    app.state.model = None
+    app.state.model_version = None
+
+app = FastAPI(lifespan=lifespan)
 
 class ContradictPayload(BaseModel):
     input_id: str
@@ -38,33 +53,32 @@ async def add_metrics(request: Request, call_next):
 
 @app.get('/health')
 def health():
+    # Health is okay even if model is not loaded, as it has fallback logic.
     return {'status': 'ok'}
 
 @app.get('/config')
-def get_config():
+def get_config(request: Request):
     """Returns non-sensitive service configuration."""
     return {
         "model_path": config.CRITIC_MODEL_PATH,
-        "model_version": model_version
+        "model_version": request.app.state.model_version
     }
 
 @app.post('/contradict')
-async def contradict(payload: ContradictPayload):
-    # Original proposer's prediction
+async def contradict(payload: ContradictPayload, request: Request):
     p0 = payload.predictions[0]['p']
+    # Safely access model and version from app state, providing defaults.
+    model = getattr(request.app.state, 'model', None)
+    model_version = getattr(request.app.state, 'model_version', 'critic-v1-fallback')
 
-    # Generate critic's prediction
     if model is None:
         # Fallback to simple logic if model is not loaded
         cp0 = min(0.99, 1.0 - p0 + 0.05)
     else:
         try:
-            # The model was trained on features in a specific order. We must enforce that order.
             ordered_feature_names = ['f1', 'f2']
             feature_values = [payload.features[k] for k in ordered_feature_names]
             features_array = np.array(feature_values).reshape(1, -1)
-
-            # Get critic's probability distribution
             critic_probabilities = model.predict_proba(features_array)[0]
             cp0 = critic_probabilities[0]
         except KeyError as e:
@@ -75,8 +89,6 @@ async def contradict(payload: ContradictPayload):
             raise HTTPException(status_code=500, detail=f"Error during critic prediction: {e}")
 
     cp1 = 1.0 - cp0
-
-    # Compute dissonance metric (absolute diff between proposer and critic)
     d = abs(p0 - cp0)
     set_d_value(SERVICE_NAME, d)
     logger.info({'event': 'contradict', 'input_id': payload.input_id, 'd': d})
