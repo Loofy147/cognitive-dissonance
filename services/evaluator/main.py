@@ -16,30 +16,30 @@ logger = logging.getLogger('evaluator')
 SERVICE_NAME = 'evaluator'
 
 # This function contains the core orchestration logic
-async def _run_orchestration_cycle():
+async def _run_orchestration_cycle(app: FastAPI):
     input_id = str(uuid.uuid4())
     features = {'f1': round(np.random.uniform(0, 2), 2), 'f2': round(np.random.uniform(0, 2), 2)}
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        r = await client.post(config.PROPOSER_URL, json={'input_id': input_id, 'features': features})
-        proposal = r.json()
-        logger.info({'stage': 'proposed', 'proposal': proposal})
+    client = app.state.http_client
+    r = await client.post(config.PROPOSER_URL, json={'input_id': input_id, 'features': features})
+    proposal = r.json()
+    logger.info({'stage': 'proposed', 'proposal': proposal})
 
-        critic_payload = {**proposal, 'features': features}
-        c = await client.post(config.CRITIC_URL, json=critic_payload)
-        contradiction = c.json()
-        logger.info({'stage': 'contradicted', 'contradiction': contradiction})
+    critic_payload = {**proposal, 'features': features}
+    c = await client.post(config.CRITIC_URL, json=critic_payload)
+    contradiction = c.json()
+    logger.info({'stage': 'contradicted', 'contradiction': contradiction})
 
-        s = await client.post(config.SAFETY_URL, json=contradiction)
-        safety = s.json()
-        logger.info({'stage': 'safety', 'result': safety})
-        if not safety.get('allow', False):
-            return {'status': 'blocked_by_safety', 'reason': safety.get('reason')}
+    s = await client.post(config.SAFETY_URL, json=contradiction)
+    safety = s.json()
+    logger.info({'stage': 'safety', 'result': safety})
+    if not safety.get('allow', False):
+        return {'status': 'blocked_by_safety', 'reason': safety.get('reason')}
 
-        learner_payload = {'proposal': proposal, 'contradiction': contradiction, 'features': features}
-        u = await client.post(config.LEARNER_URL, json=learner_payload)
-        updated = u.json()
-        logger.info({'stage': 'learner', 'updated': updated})
+    learner_payload = {'proposal': proposal, 'contradiction': contradiction, 'features': features}
+    u = await client.post(config.LEARNER_URL, json=learner_payload)
+    updated = u.json()
+    logger.info({'stage': 'learner', 'updated': updated})
 
     return {'status': 'completed', 'input_id': input_id}
 
@@ -47,7 +47,7 @@ async def evaluation_loop(app: FastAPI):
     """The main evaluation loop running in the background."""
     while True:
         try:
-            await asyncio.wait_for(_run_orchestration_cycle(), timeout=config.EVALUATOR_LOOP_TIMEOUT_SECONDS)
+            await asyncio.wait_for(_run_orchestration_cycle(app), timeout=config.EVALUATOR_LOOP_TIMEOUT_SECONDS)
             app.state.last_run_timestamp = datetime.datetime.now(datetime.UTC).isoformat()
         except asyncio.TimeoutError:
             logger.warning(f'run_once call timed out after {config.EVALUATOR_LOOP_TIMEOUT_SECONDS} seconds.')
@@ -63,10 +63,12 @@ async def evaluation_loop(app: FastAPI):
 async def lifespan(app: FastAPI):
     """Manage application state and background tasks."""
     app.state.last_run_timestamp = None
+    app.state.http_client = httpx.AsyncClient(timeout=10.0)
     loop = asyncio.get_event_loop()
     task = loop.create_task(evaluation_loop(app))
     yield
     task.cancel()
+    await app.state.http_client.aclose()
     try:
         await task
     except asyncio.CancelledError:
@@ -98,9 +100,9 @@ def get_config():
     }
 
 @app.post('/run_once')
-async def run_once_endpoint():
+async def run_once_endpoint(request: Request):
     """Endpoint to trigger a single orchestration cycle for testing."""
-    return await _run_orchestration_cycle()
+    return await _run_orchestration_cycle(request.app)
 
 if __name__ == '__main__':
     uvicorn.run(app, host='0.0.0.0', port=8000)

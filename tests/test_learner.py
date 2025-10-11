@@ -14,10 +14,9 @@ def client():
     Provides a test client for the learner service. It patches the mlflow
     dependency *before* the app is created to prevent startup errors.
     """
-    with patch("services.learner.main.mlflow"):
+    with patch("mlflow.set_tracking_uri"), patch("mlflow.set_experiment"):
         from services.learner.main import app
-        # Reload the module to ensure the patch is applied during import
-        importlib.reload(sys.modules['services.learner.main'])
+        importlib.reload(sys.modules.get("services.learner.main"))
         with TestClient(app) as test_client:
             yield test_client
 
