@@ -1,10 +1,14 @@
 from fastapi import FastAPI, Request, HTTPException
 from pydantic import BaseModel
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import uvicorn
 import pickle
 import numpy as np
 import logging
 import sys
+import math
 from contextlib import asynccontextmanager
 from services.common.metrics import instrument_request
 from services.common.logging_config import configure_logging
@@ -14,6 +18,8 @@ from services.common import config
 configure_logging()
 logger = logging.getLogger('proposer')
 SERVICE_NAME = 'proposer'
+
+limiter = Limiter(key_func=get_remote_address)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -35,12 +41,15 @@ async def lifespan(app: FastAPI):
     app.state.model_version = None
 
 app = FastAPI(lifespan=lifespan)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 class Input(BaseModel):
     input_id: str
     features: dict
 
 @app.middleware("http")
+@limiter.limit("100/minute")
 async def add_metrics(request: Request, call_next):
     instrument_request(SERVICE_NAME, request.url.path, request.method)
     return await call_next(request)
@@ -68,9 +77,15 @@ async def predict(item: Input, request: Request):
         model = request.app.state.model
         model_version = request.app.state.model_version
 
-        # Enforce a canonical feature order to prevent incorrect predictions.
+        # Enforce a canonical feature order and validate inputs.
         ordered_feature_names = ['f1', 'f2']
-        feature_values = [item.features[k] for k in ordered_feature_names]
+        feature_values = []
+        for k in ordered_feature_names:
+            value = item.features[k]
+            if not isinstance(value, (int, float)) or not math.isfinite(value):
+                raise HTTPException(status_code=422, detail=f"Invalid value for feature '{k}': must be a finite number.")
+            feature_values.append(value)
+
         features_array = np.array(feature_values).reshape(1, -1)
 
         # Get probability distribution

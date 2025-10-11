@@ -1,4 +1,7 @@
 from fastapi import FastAPI
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import uvicorn
 import logging
 import json
@@ -10,7 +13,10 @@ from services.common import config
 
 configure_logging()
 logger = logging.getLogger('meta-controller')
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI()
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 SERVICE_NAME='meta-controller'
 
 def _load_policy():
@@ -49,6 +55,7 @@ def _save_policy(policy_data: dict):
 policy = _load_policy()
 
 @app.middleware("http")
+@limiter.limit("100/minute")
 async def add_metrics(request: Request, call_next):
     instrument_request(SERVICE_NAME, request.url.path, request.method)
     return await call_next(request)

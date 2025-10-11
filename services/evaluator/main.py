@@ -1,4 +1,7 @@
 from fastapi import FastAPI, Request
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import uvicorn
 import httpx
 import uuid
@@ -14,6 +17,8 @@ import datetime
 configure_logging()
 logger = logging.getLogger('evaluator')
 SERVICE_NAME = 'evaluator'
+
+limiter = Limiter(key_func=get_remote_address)
 
 # This function contains the core orchestration logic
 async def _run_orchestration_cycle(app: FastAPI):
@@ -75,8 +80,11 @@ async def lifespan(app: FastAPI):
         logger.info("Evaluation loop task successfully cancelled.")
 
 app = FastAPI(lifespan=lifespan)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 @app.middleware("http")
+@limiter.limit("100/minute")
 async def add_metrics(request: Request, call_next):
     instrument_request(SERVICE_NAME, request.url.path, request.method)
     return await call_next(request)
