@@ -13,6 +13,7 @@ def client():
     """Provides a test client for the evaluator service."""
     from services.evaluator.main import app
     importlib.reload(sys.modules['services.evaluator.main'])
+    # The TestClient must be used in a `with` statement to trigger lifespan events.
     with TestClient(app) as test_client:
         yield test_client
 
@@ -36,8 +37,11 @@ def test_config_endpoint(client):
     assert "loop_timeout_seconds" in config_data
 
 @patch("services.evaluator.main.httpx.AsyncClient")
-def test_run_once_endpoint(mock_async_client, client):
+def test_run_once_endpoint(mock_async_client):
     """Tests the /run_once endpoint, mocking the downstream service calls."""
+    from services.evaluator.main import app
+    importlib.reload(sys.modules['services.evaluator.main'])
+
     # Create a mock response object
     mock_response = MagicMock()
     # The .json() method on the response should return a dictionary
@@ -50,11 +54,41 @@ def test_run_once_endpoint(mock_async_client, client):
     }
 
     # The post method is async, so its return value should be our mock_response
-    mock_async_client.return_value.__aenter__.return_value.post.return_value = mock_response
+    mock_async_client.return_value.post = AsyncMock(return_value=mock_response)
+    mock_async_client.return_value.aclose = AsyncMock()
 
-    response = client.post("/run_once")
+    with TestClient(app) as client:
+        response = client.post("/run_once")
 
     assert response.status_code == 200
     response_data = response.json()
     assert response_data['status'] == 'completed'
     assert 'input_id' in response_data
+
+from unittest.mock import patch, MagicMock, AsyncMock
+
+@patch("services.evaluator.main.httpx.AsyncClient")
+def test_client_is_reused_across_requests(mock_async_client):
+    """
+    Tests that the httpx.AsyncClient is reused across multiple requests.
+    """
+    from services.evaluator.main import app
+    importlib.reload(sys.modules['services.evaluator.main'])
+
+    mock_response = MagicMock()
+    mock_response.json.return_value = {
+        "status": "mocked_success",
+        "allow": True,
+    }
+    # Since the client is now created in the lifespan, we need to configure the mock
+    # to behave like an async context manager.
+    mock_async_client.return_value.post = AsyncMock(return_value=mock_response)
+    mock_async_client.return_value.aclose = AsyncMock()
+
+    with TestClient(app) as client:
+        # Make two requests
+        client.post("/run_once")
+        client.post("/run_once")
+
+    # The client should be created once during the lifespan.
+    assert mock_async_client.call_count == 1
