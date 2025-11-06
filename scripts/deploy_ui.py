@@ -5,6 +5,7 @@ import argparse
 def main():
     parser = argparse.ArgumentParser(description="Deploy the Gradio UI to Hugging Face Spaces.")
     parser.add_argument("--hf-token", required=True, help="Your Hugging Face API token.")
+    parser.add_argument("--evaluator-url", required=True, help="The URL of the evaluator service.")
     args = parser.parse_args()
 
     api = HfApi()
@@ -34,6 +35,15 @@ def main():
             token=args.hf_token,
         )
         print("Upload successful.")
+
+        print(f"Setting environment variable EVALUATOR_URL to {args.evaluator_url}")
+        api.add_space_secret(
+            repo_id=repo_id,
+            key="EVALUATOR_URL",
+            value=args.evaluator_url,
+            token=args.hf_token,
+        )
+        print("Environment variable set.")
 
     except Exception as e:
         print(f"Failed to deploy to Hugging Face: {e}")

@@ -130,10 +130,6 @@ services:
     ports:
       - "7860:7860"
 
-volumes:
-  meta_db_data:
-  minio_data:
-
   mlflow:
     build:
       context: .
@@ -153,3 +149,7 @@ volumes:
     depends_on:
       - postgres
       - minio
+
+volumes:
+  meta_db_data:
+  minio_data:

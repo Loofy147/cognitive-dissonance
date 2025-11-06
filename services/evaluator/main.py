@@ -21,9 +21,8 @@ SERVICE_NAME = 'evaluator'
 limiter = Limiter(key_func=get_remote_address)
 
 # This function contains the core orchestration logic
-async def _run_orchestration_cycle(app: FastAPI):
+async def _run_orchestration_cycle(app: FastAPI, features: dict):
     input_id = str(uuid.uuid4())
-    features = {'f1': round(np.random.uniform(0, 2), 2), 'f2': round(np.random.uniform(0, 2), 2)}
 
     client = app.state.http_client
     r = await client.post(config.PROPOSER_URL, json={'input_id': input_id, 'features': features})
@@ -52,7 +51,8 @@ async def evaluation_loop(app: FastAPI):
     """The main evaluation loop running in the background."""
     while True:
         try:
-            await asyncio.wait_for(_run_orchestration_cycle(app), timeout=config.EVALUATOR_LOOP_TIMEOUT_SECONDS)
+            features = {'f1': round(np.random.uniform(0, 2), 2), 'f2': round(np.random.uniform(0, 2), 2)}
+            await asyncio.wait_for(_run_orchestration_cycle(app, features), timeout=config.EVALUATOR_LOOP_TIMEOUT_SECONDS)
             app.state.last_run_timestamp = datetime.datetime.now(datetime.UTC).isoformat()
         except asyncio.TimeoutError:
             logger.warning(f'run_once call timed out after {config.EVALUATOR_LOOP_TIMEOUT_SECONDS} seconds.')
@@ -107,10 +107,15 @@ def get_config():
         "loop_timeout_seconds": config.EVALUATOR_LOOP_TIMEOUT_SECONDS
     }
 
+from pydantic import BaseModel
+
+class RunOnceRequest(BaseModel):
+    features: dict
+
 @app.post('/run_once')
-async def run_once_endpoint(request: Request):
+async def run_once_endpoint(request: Request, body: RunOnceRequest):
     """Endpoint to trigger a single orchestration cycle for testing."""
-    return await _run_orchestration_cycle(request.app)
+    return await _run_orchestration_cycle(request.app, body.features)
 
 if __name__ == '__main__':
     uvicorn.run(app, host='0.0.0.0', port=8000)
