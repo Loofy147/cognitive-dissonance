@@ -30,10 +30,10 @@ services:
       context: .
       dockerfile: services/proposer/Dockerfile
     env_file: ./.env
-    volumes:
-      - ./services/models:/app/models
     environment:
-      - PROPOSER_MODEL_PATH=/app/models/proposer.pkl
+      - AWS_ACCESS_KEY_ID=${MINIO_ACCESS_KEY}
+      - AWS_SECRET_ACCESS_KEY=${MINIO_SECRET_KEY}
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
     ports:
       - 8001:8000
     depends_on:
@@ -44,10 +44,10 @@ services:
       context: .
       dockerfile: services/critic/Dockerfile
     env_file: ./.env
-    volumes:
-      - ./services/models:/app/models
     environment:
-      - CRITIC_MODEL_PATH=/app/models/critic.pkl
+      - AWS_ACCESS_KEY_ID=${MINIO_ACCESS_KEY}
+      - AWS_SECRET_ACCESS_KEY=${MINIO_SECRET_KEY}
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
     ports:
       - 8002:8000
     depends_on:
@@ -123,12 +123,12 @@ services:
     ports:
       - 8007:8000
 
-  ui:
-    build:
-      context: .
-      dockerfile: services/ui/Dockerfile
-    ports:
-      - "7860:7860"
+  #ui:
+  #  build:
+  #    context: .
+  #    dockerfile: services/ui/Dockerfile
+  #  ports:
+  #    - "7860:7860"
 
   mlflow:
     build:

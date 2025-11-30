@@ -17,7 +17,7 @@ POLICY_FILE_PATH = os.getenv("POLICY_FILE_PATH", "/app/policy.json")
 # Safety Gate
 MAX_DISSONANCE = float(os.getenv("MAX_DISSONANCE", 0.5))
 
-# Model Paths
+# Model Paths (Legacy, to be deprecated)
 PROPOSER_MODEL_PATH = os.getenv("PROPOSER_MODEL_PATH", "/app/models/proposer.pkl")
 CRITIC_MODEL_PATH = os.getenv("CRITIC_MODEL_PATH", "/app/models/critic.pkl")
 
@@ -44,5 +44,10 @@ CONFIG_URLS = {
     "safety-gate": "http://safety-gate:8000/config",
 }
 
-# MLflow
-MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
+# MLflow Configuration
+MLFLOW_HOST = os.getenv("MLFLOW_HOST", "mlflow")
+MLFLOW_TRACKING_URI = f"http://{MLFLOW_HOST}:5000"
+
+# Model Registry Names
+PROPOSER_MODEL_NAME = "proposer-model"
+CRITIC_MODEL_NAME = "critic-model"

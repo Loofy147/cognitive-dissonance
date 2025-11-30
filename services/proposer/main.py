@@ -4,11 +4,13 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import uvicorn
-import pickle
+import mlflow
 import numpy as np
+import pandas as pd
 import logging
 import sys
 import math
+import time
 from contextlib import asynccontextmanager
 from services.common.metrics import instrument_request
 from services.common.logging_config import configure_logging
@@ -24,19 +26,32 @@ limiter = Limiter(key_func=get_remote_address)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    Manages the application's lifespan. The model is loaded on startup.
-    This prevents the service from starting if the model is not available.
+    Manages the application's lifespan. The model is loaded from the MLflow
+    Model Registry on startup, with a retry mechanism to handle potential
+    delays in model availability.
     """
-    try:
-        with open(config.PROPOSER_MODEL_PATH, 'rb') as f:
-            app.state.model = pickle.load(f)
-        logger.info(f"Model loaded successfully from {config.PROPOSER_MODEL_PATH}")
-        app.state.model_version = 'proposer-v2-sklearn'
-    except (FileNotFoundError, IOError, pickle.UnpicklingError) as e:
-        logger.critical(f"Failed to load model: {e}. Service cannot start.")
-        sys.exit(1) # Fail fast
+    mlflow.set_tracking_uri(config.MLFLOW_TRACKING_URI)
+    model_uri = f"models:/{config.PROPOSER_MODEL_NAME}@production"
+    logger.info(f"Attempting to load model from MLflow: {model_uri}")
+
+    model = None
+    for attempt in range(5): # Retry up to 5 times
+        try:
+            model = mlflow.pyfunc.load_model(model_uri)
+            app.state.model = model
+            app.state.model_version = model.metadata.run_id
+            logger.info(f"Model loaded successfully on attempt {attempt + 1}. Version: {app.state.model_version}")
+            break # Exit loop on success
+        except Exception as e:
+            logger.warning(f"Attempt {attempt + 1} failed to load model: {e}. Retrying in 5 seconds...")
+            time.sleep(5)
+
+    if model is None:
+        logger.critical("Failed to load model after multiple attempts. Service cannot start.")
+        sys.exit(1)
+
     yield
-    # Clean up resources if needed on shutdown
+
     app.state.model = None
     app.state.model_version = None
 
@@ -56,8 +71,6 @@ async def add_metrics(request: Request, call_next):
 
 @app.get('/health')
 def health(request: Request):
-    # If the model failed to load, the lifespan event would have prevented startup.
-    # So, if we reach here, the service is healthy.
     if hasattr(request.app.state, 'model') and request.app.state.model is not None:
         return {'status': 'ok'}
     else:
@@ -65,10 +78,10 @@ def health(request: Request):
 
 @app.get('/config')
 def get_config(request: Request):
-    """Returns non-sensitive service configuration."""
     return {
-        "model_path": config.PROPOSER_MODEL_PATH,
-        "model_version": request.app.state.model_version
+        "model_name": config.PROPOSER_MODEL_NAME,
+        "model_version": getattr(request.app.state, 'model_version', 'N/A'),
+        "mlflow_tracking_uri": config.MLFLOW_TRACKING_URI,
     }
 
 @app.post('/predict')
@@ -77,20 +90,22 @@ async def predict(item: Input, request: Request):
         model = request.app.state.model
         model_version = request.app.state.model_version
 
-        # Enforce a canonical feature order and validate inputs.
         ordered_feature_names = ['f1', 'f2']
         feature_values = []
         for k in ordered_feature_names:
-            value = item.features[k]
+            value = item.features.get(k)
+            if value is None: raise KeyError(f"Missing feature: {k}")
             if not isinstance(value, (int, float)) or not math.isfinite(value):
-                raise HTTPException(status_code=422, detail=f"Invalid value for feature '{k}': must be a finite number.")
+                raise HTTPException(status_code=422, detail=f"Invalid value for feature '{k}'.")
             feature_values.append(value)
 
         features_array = np.array(feature_values).reshape(1, -1)
 
-        # Get probability distribution
-        probabilities = model.predict_proba(features_array)[0]
-        p0, p1 = probabilities[0], probabilities[1]
+        input_df = pd.DataFrame(features_array, columns=ordered_feature_names)
+
+        probabilities = model.predict(input_df)
+        p0 = float(probabilities[0])
+        p1 = 1.0 - p0
 
         logger.info({'event': 'predict', 'input_id': item.input_id, 'p0': p0, 'p1': p1})
 
@@ -101,10 +116,10 @@ async def predict(item: Input, request: Request):
         }
     except KeyError as e:
         logger.error(f"Missing feature in payload: {e}")
-        raise HTTPException(status_code=400, detail=f"Missing required feature: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Prediction failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Internal server error during prediction: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
 
 if __name__ == '__main__':
     uvicorn.run(app, host='0.0.0.0', port=8000)

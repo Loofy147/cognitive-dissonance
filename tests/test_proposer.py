@@ -12,11 +12,12 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 @pytest.fixture
 def client():
     """
-    Provides a test client for the proposer service. It patches the model
-    loading dependencies to prevent startup failures during testing.
+    Provides a test client for the proposer service. It patches the MLflow
+    model loading dependencies to prevent startup failures during testing.
     """
-    # Patches are applied to the module before it's reloaded and the app is created.
-    with patch("services.proposer.main.open"), patch("services.proposer.main.pickle.load"):
+    with patch("mlflow.pyfunc.load_model") as mock_load_model:
+        # Mock the metadata attribute of the loaded model
+        mock_load_model.return_value.metadata.run_id = "test-run-id"
         from services.proposer.main import app
         importlib.reload(sys.modules['services.proposer.main'])
 
@@ -25,7 +26,6 @@ def client():
 
 def test_health_endpoint(client):
     """Tests that the /health endpoint is available and healthy."""
-    # The lifespan event sets app.state.model. The health check verifies it.
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
@@ -35,14 +35,14 @@ def test_config_endpoint(client):
     response = client.get("/config")
     assert response.status_code == 200
     config_data = response.json()
-    assert "model_path" in config_data
+    assert "model_name" in config_data
     assert "model_version" in config_data
+    assert "mlflow_tracking_uri" in config_data
 
 def test_predict_endpoint(client):
     """Tests a successful prediction from the /predict endpoint."""
-    # Mock the model's prediction method on the app's state
     mock_model = client.app.state.model
-    mock_model.predict_proba.return_value = [[0.8, 0.2]]
+    mock_model.predict.return_value = [0.8] # MLflow pyfunc models return a single value
 
     payload = { "input_id": "test-123", "features": {"f1": 1, "f2": 0} }
     response = client.post("/predict", json=payload)
@@ -55,21 +55,14 @@ def test_predict_endpoint(client):
 def test_fail_fast_on_model_load_error():
     """
     Verifies that the service exits immediately if the model cannot be loaded.
-    This test does NOT use the client fixture because we want the app to fail.
     """
-    # Patch open to simulate a missing model file, and patch sys.exit to verify it's called.
-    with patch("builtins.open", side_effect=FileNotFoundError), \
+    with patch("mlflow.pyfunc.load_model", side_effect=Exception("MLflow error")), \
          patch("sys.exit") as mock_exit:
 
-        # Reload the proposer's main module to apply the patch at import time.
         import services.proposer.main
         importlib.reload(services.proposer.main)
 
-        # The TestClient context manager triggers the lifespan startup.
-        # The startup should call our mocked sys.exit. Because the mock doesn't
-        # actually exit, the app will start normally.
         with TestClient(services.proposer.main.app):
-            pass  # The app startup will proceed without exiting.
+            pass
 
-        # Verify that the application tried to exit with status code 1.
         mock_exit.assert_called_once_with(1)
