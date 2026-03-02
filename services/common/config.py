@@ -17,10 +17,6 @@ POLICY_FILE_PATH = os.getenv("POLICY_FILE_PATH", "/app/policy.json")
 # Safety Gate
 MAX_DISSONANCE = float(os.getenv("MAX_DISSONANCE", 0.5))
 
-# Model Paths (Legacy, to be deprecated)
-PROPOSER_MODEL_PATH = os.getenv("PROPOSER_MODEL_PATH", "/app/models/proposer.pkl")
-CRITIC_MODEL_PATH = os.getenv("CRITIC_MODEL_PATH", "/app/models/critic.pkl")
-
 # Evaluator
 EVALUATOR_LOOP_TIMEOUT_SECONDS = float(os.getenv("EVALUATOR_LOOP_TIMEOUT_SECONDS", 30.0))
 
@@ -48,9 +44,38 @@ CONFIG_URLS = {
 MLFLOW_HOST = os.getenv("MLFLOW_HOST", "mlflow")
 MLFLOW_TRACKING_URI = f"http://{MLFLOW_HOST}:5000"
 
-# Model Registry Names
-PROPOSER_MODEL_NAME = "proposer-model"
-CRITIC_MODEL_NAME = "critic-model"
+# Multi-Task Configuration
+TASKS = {
+    "diabetes": {
+        "feature_names": [
+            "age", "gender", "polyuria", "polydipsia", "sudden_weight_loss",
+            "weakness", "polyphagia", "genital_thrush", "visual_blurring",
+            "itching", "irritability", "delayed_healing", "partial_paresis",
+            "muscle_stiffness", "alopecia", "obesity"
+        ],
+        "proposer_model_name": "proposer-diabetes",
+        "critic_model_name": "critic-diabetes",
+        "dataset_path": "data/diabetes/diabetes_data.csv"
+    },
+    "heart_failure": {
+        "feature_names": [
+            "Age", "Sex", "ChestPainType", "RestingBP", "Cholesterol",
+            "FastingBS", "RestingECG", "MaxHR", "ExerciseAngina", "Oldpeak",
+            "ST_Slope"
+        ],
+        "proposer_model_name": "proposer-heart_failure",
+        "critic_model_name": "critic-heart_failure",
+        "dataset_path": "data/heart_failure/heart_failure_data.csv"
+    }
+}
 
-# Dataset Features
-FEATURE_NAMES = os.getenv("FEATURE_NAMES", "age,gender,polyuria,polydipsia,sudden_weight_loss,weakness,polyphagia,genital_thrush,visual_blurring,itching,irritability,delayed_healing,partial_paresis,muscle_stiffness,alopecia,obesity").split(",")
+DEFAULT_TASK = os.getenv("DEFAULT_TASK", "diabetes")
+
+# Helper to get task config safely
+def get_task_config(task_id: str):
+    return TASKS.get(task_id, TASKS[DEFAULT_TASK])
+
+# (Legacy) Keeping these for backward compatibility
+FEATURE_NAMES = get_task_config(DEFAULT_TASK)["feature_names"]
+PROPOSER_MODEL_NAME = get_task_config(DEFAULT_TASK)["proposer_model_name"]
+CRITIC_MODEL_NAME = get_task_config(DEFAULT_TASK)["critic_model_name"]

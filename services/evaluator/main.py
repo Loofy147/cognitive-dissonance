@@ -13,6 +13,7 @@ from services.common.metrics import instrument_request, EVALUATION_LOOP_TIMEOUTS
 from services.common import config
 from contextlib import asynccontextmanager
 import datetime
+from typing import Optional
 
 configure_logging()
 logger = logging.getLogger('evaluator')
@@ -21,18 +22,18 @@ SERVICE_NAME = 'evaluator'
 limiter = Limiter(key_func=get_remote_address)
 
 # This function contains the core orchestration logic
-async def _run_orchestration_cycle(app: FastAPI, features: dict):
+async def _run_orchestration_cycle(app: FastAPI, features: dict, task_id: str):
     input_id = str(uuid.uuid4())
 
     client = app.state.http_client
-    r = await client.post(config.PROPOSER_URL, json={'input_id': input_id, 'features': features})
+    r = await client.post(config.PROPOSER_URL, json={'input_id': input_id, 'task_id': task_id, 'features': features})
     proposal = r.json()
-    logger.info({'stage': 'proposed', 'proposal': proposal})
+    logger.info({'stage': 'proposed', 'task_id': task_id, 'proposal': proposal})
 
-    critic_payload = {**proposal, 'features': features}
+    critic_payload = {**proposal, 'features': features, 'task_id': task_id}
     c = await client.post(config.CRITIC_URL, json=critic_payload)
     contradiction = c.json()
-    logger.info({'stage': 'contradicted', 'contradiction': contradiction})
+    logger.info({'stage': 'contradicted', 'task_id': task_id, 'contradiction': contradiction})
 
     s = await client.post(config.SAFETY_URL, json=contradiction)
     safety = s.json()
@@ -40,28 +41,30 @@ async def _run_orchestration_cycle(app: FastAPI, features: dict):
     if not safety.get('allow', False):
         return {'status': 'blocked_by_safety', 'reason': safety.get('reason')}
 
-    learner_payload = {'proposal': proposal, 'contradiction': contradiction, 'features': features}
+    learner_payload = {'proposal': proposal, 'contradiction': contradiction, 'features': features, 'task_id': task_id}
     u = await client.post(config.LEARNER_URL, json=learner_payload)
     updated = u.json()
     logger.info({'stage': 'learner', 'updated': updated})
 
-    return {'status': 'completed', 'input_id': input_id}
+    return {'status': 'completed', 'input_id': input_id, 'task_id': task_id}
 
 async def evaluation_loop(app: FastAPI):
     """The main evaluation loop running in the background."""
     while True:
         try:
-            # Generate random features for the configured features
-            features = {k: round(np.random.uniform(0, 1), 2) for k in config.FEATURE_NAMES}
-            # Specifically handle 'age' which should be higher
-            if 'age' in features:
-                features['age'] = round(np.random.uniform(20, 80), 0)
-            # gender should be 0 or 1
-            if 'gender' in features:
-                features['gender'] = float(np.random.choice([0, 1]))
+            # Cycle through tasks
+            for task_id in config.TASKS.keys():
+                task_cfg = config.get_task_config(task_id)
+                features = {k: round(np.random.uniform(0, 1), 2) for k in task_cfg["feature_names"]}
 
-            await asyncio.wait_for(_run_orchestration_cycle(app, features), timeout=config.EVALUATOR_LOOP_TIMEOUT_SECONDS)
-            app.state.last_run_timestamp = datetime.datetime.now(datetime.UTC).isoformat()
+                # Domain specific adjustments for diabetes
+                if task_id == "diabetes":
+                    if 'age' in features: features['age'] = round(np.random.uniform(20, 80), 0)
+                    if 'gender' in features: features['gender'] = float(np.random.choice([0, 1]))
+
+                await asyncio.wait_for(_run_orchestration_cycle(app, features, task_id), timeout=config.EVALUATOR_LOOP_TIMEOUT_SECONDS)
+                app.state.last_run_timestamp = datetime.datetime.now(datetime.UTC).isoformat()
+                await asyncio.sleep(1.0)
         except asyncio.TimeoutError:
             logger.warning(f'run_once call timed out after {config.EVALUATOR_LOOP_TIMEOUT_SECONDS} seconds.')
             EVALUATION_LOOP_TIMEOUTS_TOTAL.labels(service=SERVICE_NAME).inc()
@@ -108,6 +111,7 @@ def health(request: Request):
 def get_config():
     """Returns non-sensitive service configuration."""
     return {
+        "tasks": list(config.TASKS.keys()),
         "proposer_url": config.PROPOSER_URL,
         "critic_url": config.CRITIC_URL,
         "learner_url": config.LEARNER_URL,
@@ -119,11 +123,13 @@ from pydantic import BaseModel
 
 class RunOnceRequest(BaseModel):
     features: dict
+    task_id: Optional[str] = config.DEFAULT_TASK
 
 @app.post('/run_once')
 async def run_once_endpoint(request: Request, body: RunOnceRequest):
     """Endpoint to trigger a single orchestration cycle for testing."""
-    return await _run_orchestration_cycle(request.app, body.features)
+    task_id = body.task_id or config.DEFAULT_TASK
+    return await _run_orchestration_cycle(request.app, body.features, task_id)
 
 if __name__ == '__main__':
     uvicorn.run(app, host='0.0.0.0', port=8000)

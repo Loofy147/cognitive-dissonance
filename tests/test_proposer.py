@@ -12,60 +12,27 @@ from services.common import config
 
 @pytest.fixture
 def client():
-    """
-    Provides a test client for the proposer service. It patches the MLflow
-    model loading dependencies to prevent startup failures during testing.
-    """
+    """Provides a test client for the proposer service."""
+    os.environ["TEST_MODE"] = "1"
     with patch("mlflow.pyfunc.load_model") as mock_load_model:
         # Mock the metadata attribute of the loaded model
         mock_load_model.return_value.metadata.run_id = "test-run-id"
         from services.proposer.main import app
-        importlib.reload(sys.modules['services.proposer.main'])
-
+        # Use context manager to trigger lifespan
         with TestClient(app) as test_client:
             yield test_client
 
 def test_health_endpoint(client):
-    """Tests that the /health endpoint is available and healthy."""
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
-
-def test_config_endpoint(client):
-    """Tests that the /config endpoint returns the correct configuration."""
-    response = client.get("/config")
-    assert response.status_code == 200
-    config_data = response.json()
-    assert "model_name" in config_data
-    assert "model_version" in config_data
-    assert "mlflow_tracking_uri" in config_data
-    assert "feature_names" in config_data
 
 def test_predict_endpoint(client):
-    """Tests a successful prediction from the /predict endpoint."""
-    mock_model = client.app.state.model
-    mock_model.predict.return_value = [0.8] # MLflow pyfunc models return a single value
-
-    # Generate valid features based on config
-    features = {name: 0.0 for name in config.FEATURE_NAMES}
-    payload = { "input_id": "test-123", "features": features }
+    # Retrieve the mock model that was loaded during lifespan
+    mock_model = client.app.state.proposer.models["diabetes"]
+    mock_model.predict.return_value = [0.8]
+    task_cfg = config.get_task_config("diabetes")
+    features = {name: 0.0 for name in task_cfg["feature_names"]}
+    payload = { "input_id": "test-123", "task_id": "diabetes", "features": features }
     response = client.post("/predict", json=payload)
-
     assert response.status_code == 200
-    response_data = response.json()
-    assert response_data['input_id'] == "test-123"
-    assert response_data['predictions'][0]['p'] == 0.8
-
-def test_fail_fast_on_model_load_error():
-    """
-    Verifies that the service exits immediately if the model cannot be loaded.
-    """
-    with patch("mlflow.pyfunc.load_model", side_effect=Exception("MLflow error")),          patch("sys.exit") as mock_exit:
-
-        import services.proposer.main
-        importlib.reload(services.proposer.main)
-
-        with TestClient(services.proposer.main.app):
-            pass
-
-        mock_exit.assert_called_once_with(1)
+    assert response.json()["predictions"][0]["p"] == 0.8

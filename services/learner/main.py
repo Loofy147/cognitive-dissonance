@@ -48,6 +48,7 @@ async def lifespan(app: FastAPI):
         cur.execute("""
             CREATE TABLE IF NOT EXISTS dissonant_samples (
                 id SERIAL PRIMARY KEY,
+                task_id TEXT,
                 input_id TEXT,
                 features JSONB,
                 proposal JSONB,
@@ -73,6 +74,7 @@ class UpdatePayload(BaseModel):
     proposal: dict
     contradiction: dict
     features: Optional[dict] = None
+    task_id: Optional[str] = config.DEFAULT_TASK
 
 @app.middleware("http")
 @limiter.limit("100/minute")
@@ -107,6 +109,7 @@ async def update(payload: UpdatePayload):
         p = predictions[0]['p']
         cp = contradictory[0]['p']
         input_id = payload.proposal.get('input_id')
+        task_id = payload.task_id or config.DEFAULT_TASK
     except (KeyError, IndexError) as e:
         logger.error(f"Malformed payload received. Missing 'p' key. Details: {e}")
         raise HTTPException(
@@ -122,13 +125,13 @@ async def update(payload: UpdatePayload):
             conn = get_db_connection()
             cur = conn.cursor()
             cur.execute(
-                "INSERT INTO dissonant_samples (input_id, features, proposal, contradiction, loss) VALUES (%s, %s, %s, %s, %s)",
-                (input_id, json.dumps(payload.features), json.dumps(payload.proposal), json.dumps(payload.contradiction), loss)
+                "INSERT INTO dissonant_samples (task_id, input_id, features, proposal, contradiction, loss) VALUES (%s, %s, %s, %s, %s, %s)",
+                (task_id, input_id, json.dumps(payload.features), json.dumps(payload.proposal), json.dumps(payload.contradiction), loss)
             )
             conn.commit()
             cur.close()
             conn.close()
-            logger.info(f"Persisted dissonant sample {input_id} to database.")
+            logger.info(f"Persisted dissonant sample {input_id} for task {task_id} to database.")
         except Exception as e:
             logger.error(f"Failed to persist dissonant sample to database: {e}")
 
@@ -138,13 +141,16 @@ async def update(payload: UpdatePayload):
             logger.info(f"Started MLflow run: {run_id}")
 
             mlflow.log_params(payload.features)
+            mlflow.log_param("task_id", task_id)
             mlflow.log_metric("loss", loss)
             mlflow.set_tag("input_id", input_id)
+            mlflow.set_tag("task_id", task_id)
             mlflow.set_tag("proposer_version", payload.proposal.get("model_version"))
             mlflow.set_tag("critic_version", payload.contradiction.get("critic_version"))
 
             logger.info({
                 'event': 'update',
+                'task_id': task_id,
                 'input_id': input_id,
                 'loss': loss,
                 'features': payload.features,
