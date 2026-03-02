@@ -84,6 +84,7 @@ def get_config(request: Request):
         "model_name": config.CRITIC_MODEL_NAME,
         "model_version": getattr(request.app.state, 'model_version', 'N/A'),
         "mlflow_tracking_uri": config.MLFLOW_TRACKING_URI,
+        "feature_names": config.FEATURE_NAMES,
     }
 
 @app.post('/contradict')
@@ -93,7 +94,7 @@ async def contradict(payload: ContradictPayload, request: Request):
     model_version = request.app.state.model_version
 
     try:
-        ordered_feature_names = ['f1', 'f2']
+        ordered_feature_names = config.FEATURE_NAMES
         feature_values = []
         for k in ordered_feature_names:
             value = payload.features.get(k)

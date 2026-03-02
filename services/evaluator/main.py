@@ -51,7 +51,15 @@ async def evaluation_loop(app: FastAPI):
     """The main evaluation loop running in the background."""
     while True:
         try:
-            features = {'f1': round(np.random.uniform(0, 2), 2), 'f2': round(np.random.uniform(0, 2), 2)}
+            # Generate random features for the configured features
+            features = {k: round(np.random.uniform(0, 1), 2) for k in config.FEATURE_NAMES}
+            # Specifically handle 'age' which should be higher
+            if 'age' in features:
+                features['age'] = round(np.random.uniform(20, 80), 0)
+            # gender should be 0 or 1
+            if 'gender' in features:
+                features['gender'] = float(np.random.choice([0, 1]))
+
             await asyncio.wait_for(_run_orchestration_cycle(app, features), timeout=config.EVALUATOR_LOOP_TIMEOUT_SECONDS)
             app.state.last_run_timestamp = datetime.datetime.now(datetime.UTC).isoformat()
         except asyncio.TimeoutError:

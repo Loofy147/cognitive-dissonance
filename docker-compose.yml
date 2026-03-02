@@ -123,12 +123,12 @@ services:
     ports:
       - 8007:8000
 
-  #ui:
-  #  build:
-  #    context: .
-  #    dockerfile: services/ui/Dockerfile
-  #  ports:
-  #    - "7860:7860"
+  ui:
+    build:
+      context: .
+      dockerfile: services/ui/Dockerfile
+    ports:
+      - "7860:7860"
 
   mlflow:
     build:

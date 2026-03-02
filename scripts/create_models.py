@@ -1,8 +1,8 @@
 import mlflow
 import mlflow.sklearn
 import numpy as np
+import pandas as pd
 from sklearn.neural_network import MLPClassifier
-from sklearn.datasets import make_moons
 import os
 import sys
 import boto3
@@ -38,13 +38,12 @@ def ensure_bucket_exists(bucket_name):
             print(f"Error checking for bucket '{bucket_name}': {e}", file=sys.stderr)
             sys.exit(1)
 
-def train_and_register_model(model_name, run_name, hidden_layer_sizes, activation, solver, alpha):
+def train_and_register_model(model_name, run_name, X, y, hidden_layer_sizes, activation, solver, alpha):
     """
     Trains a model, logs it to MLflow, registers it, and sets the 'production' alias.
     """
     print(f"Starting MLflow run '{run_name}' for model '{model_name}'...")
     with mlflow.start_run(run_name=run_name) as run:
-        X, y = make_moons(n_samples=200, noise=0.2, random_state=42)
         params = {
             "hidden_layer_sizes": str(hidden_layer_sizes), "activation": activation,
             "solver": solver, "alpha": alpha, "max_iter": 1000,
@@ -91,12 +90,25 @@ if __name__ == "__main__":
         print(f"Could not connect to MLflow server at {tracking_uri}", file=sys.stderr)
         sys.exit(1)
 
+    # Load and preprocess the diabetes dataset
+    data_path = os.path.join(project_root, 'data/diabetes/diabetes_data.csv')
+    df = pd.read_csv(data_path, sep=';')
+
+    # Preprocessing: encode gender
+    df['gender'] = df['gender'].map({'Male': 0, 'Female': 1})
+
+    # Feature selection based on config
+    X = df[config.FEATURE_NAMES]
+    y = df['class']
+
     train_and_register_model(
         model_name="proposer-model", run_name="proposer-training-run",
-        hidden_layer_sizes=(10, 5), activation='relu', solver='adam', alpha=1e-5
+        X=X, y=y,
+        hidden_layer_sizes=(16, 8), activation='relu', solver='adam', alpha=1e-5
     )
     train_and_register_model(
         model_name="critic-model", run_name="critic-training-run",
-        hidden_layer_sizes=(5, 10, 5), activation='tanh', solver='adam', alpha=1e-4
+        X=X, y=y,
+        hidden_layer_sizes=(8, 16, 8), activation='tanh', solver='adam', alpha=1e-4
     )
     print("\nBoth MLP models have been trained, registered, and assigned the 'production' alias in MLflow.")

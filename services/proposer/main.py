@@ -82,6 +82,7 @@ def get_config(request: Request):
         "model_name": config.PROPOSER_MODEL_NAME,
         "model_version": getattr(request.app.state, 'model_version', 'N/A'),
         "mlflow_tracking_uri": config.MLFLOW_TRACKING_URI,
+        "feature_names": config.FEATURE_NAMES,
     }
 
 @app.post('/predict')
@@ -90,7 +91,7 @@ async def predict(item: Input, request: Request):
         model = request.app.state.model
         model_version = request.app.state.model_version
 
-        ordered_feature_names = ['f1', 'f2']
+        ordered_feature_names = config.FEATURE_NAMES
         feature_values = []
         for k in ordered_feature_names:
             value = item.features.get(k)

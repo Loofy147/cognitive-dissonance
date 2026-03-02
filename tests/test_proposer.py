@@ -8,7 +8,8 @@ import importlib
 # Add the project root to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# This fixture is key. It patches dependencies *before* creating the app.
+from services.common import config
+
 @pytest.fixture
 def client():
     """
@@ -38,13 +39,16 @@ def test_config_endpoint(client):
     assert "model_name" in config_data
     assert "model_version" in config_data
     assert "mlflow_tracking_uri" in config_data
+    assert "feature_names" in config_data
 
 def test_predict_endpoint(client):
     """Tests a successful prediction from the /predict endpoint."""
     mock_model = client.app.state.model
     mock_model.predict.return_value = [0.8] # MLflow pyfunc models return a single value
 
-    payload = { "input_id": "test-123", "features": {"f1": 1, "f2": 0} }
+    # Generate valid features based on config
+    features = {name: 0.0 for name in config.FEATURE_NAMES}
+    payload = { "input_id": "test-123", "features": features }
     response = client.post("/predict", json=payload)
 
     assert response.status_code == 200
@@ -56,8 +60,7 @@ def test_fail_fast_on_model_load_error():
     """
     Verifies that the service exits immediately if the model cannot be loaded.
     """
-    with patch("mlflow.pyfunc.load_model", side_effect=Exception("MLflow error")), \
-         patch("sys.exit") as mock_exit:
+    with patch("mlflow.pyfunc.load_model", side_effect=Exception("MLflow error")),          patch("sys.exit") as mock_exit:
 
         import services.proposer.main
         importlib.reload(services.proposer.main)

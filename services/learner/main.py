@@ -6,6 +6,9 @@ from slowapi.errors import RateLimitExceeded
 import uvicorn
 import logging
 import mlflow
+import psycopg2
+import os
+import json
 from contextlib import asynccontextmanager
 from services.common.logging_config import configure_logging
 from services.common.metrics import instrument_request
@@ -19,22 +22,47 @@ SERVICE_NAME = 'learner'
 
 limiter = Limiter(key_func=get_remote_address)
 
+def get_db_connection():
+    return psycopg2.connect(
+        host=os.getenv("POSTGRES_HOST", "postgres"),
+        database=os.getenv("POSTGRES_DB", "cd_meta"),
+        user=os.getenv("POSTGRES_USER", "cd_user"),
+        password=os.getenv("POSTGRES_PASSWORD", "cd_pass")
+    )
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     On startup, configure the MLflow tracking URI and ensure the experiment exists.
-    This is done here to avoid making network calls on module import, which
-    simplifies testing.
+    Also ensure the database table for dissonant samples exists.
     """
     try:
         mlflow.set_tracking_uri(config.MLFLOW_TRACKING_URI)
         mlflow.set_experiment("dissonance_learning")
         logger.info(f"MLflow tracking URI set to {config.MLFLOW_TRACKING_URI}")
         logger.info("MLflow experiment set to 'dissonance_learning'")
+
+        # Initialize DB table
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS dissonant_samples (
+                id SERIAL PRIMARY KEY,
+                input_id TEXT,
+                features JSONB,
+                proposal JSONB,
+                contradiction JSONB,
+                loss FLOAT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        conn.commit()
+        cur.close()
+        conn.close()
+        logger.info("Database table 'dissonant_samples' initialized.")
+
     except Exception as e:
-        # If we can't connect to MLflow, we should log it, but the service can still run.
-        # It just won't be able to log experiment data.
-        logger.error(f"Failed to configure MLflow on startup: {e}")
+        logger.error(f"Failed to configure MLflow or Database on startup: {e}")
     yield
 
 app = FastAPI(lifespan=lifespan)
@@ -87,6 +115,22 @@ async def update(payload: UpdatePayload):
         )
 
     loss = (p - cp)**2
+
+    # Persist high-dissonance samples to the database for future re-training
+    if loss > 0.01: # threshold for "interesting" dissonance
+        try:
+            conn = get_db_connection()
+            cur = conn.cursor()
+            cur.execute(
+                "INSERT INTO dissonant_samples (input_id, features, proposal, contradiction, loss) VALUES (%s, %s, %s, %s, %s)",
+                (input_id, json.dumps(payload.features), json.dumps(payload.proposal), json.dumps(payload.contradiction), loss)
+            )
+            conn.commit()
+            cur.close()
+            conn.close()
+            logger.info(f"Persisted dissonant sample {input_id} to database.")
+        except Exception as e:
+            logger.error(f"Failed to persist dissonant sample to database: {e}")
 
     try:
         with mlflow.start_run() as run:

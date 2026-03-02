@@ -8,6 +8,8 @@ import importlib
 # Add the project root to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from services.common import config
+
 @pytest.fixture
 def client():
     """
@@ -36,17 +38,20 @@ def test_config_endpoint(client):
     assert "model_name" in config_data
     assert config_data["model_version"] == "test-version"
     assert "mlflow_tracking_uri" in config_data
+    assert "feature_names" in config_data
 
 def test_contradict_endpoint_with_model(client):
     """Tests a successful contradiction from the /contradict endpoint."""
     mock_model = client.app.state.model
     mock_model.predict.return_value = [0.3] # MLflow pyfunc models return a single value
 
+    # Generate valid features based on config
+    features = {name: 0.0 for name in config.FEATURE_NAMES}
     payload = {
         "input_id": "test-123",
         "predictions": [{"class": "A", "p": 0.8}],
         "model_version": "proposer-v1",
-        "features": {"f1": 1, "f2": 0}
+        "features": features
     }
     response = client.post("/contradict", json=payload)
 
@@ -59,8 +64,7 @@ def test_fail_fast_on_model_load_error():
     """
     Verifies that the service exits immediately if the model cannot be loaded.
     """
-    with patch("mlflow.pyfunc.load_model", side_effect=Exception("MLflow error")), \
-         patch("sys.exit") as mock_exit:
+    with patch("mlflow.pyfunc.load_model", side_effect=Exception("MLflow error")),          patch("sys.exit") as mock_exit:
 
         import services.critic.main
         importlib.reload(services.critic.main)

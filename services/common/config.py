@@ -51,3 +51,6 @@ MLFLOW_TRACKING_URI = f"http://{MLFLOW_HOST}:5000"
 # Model Registry Names
 PROPOSER_MODEL_NAME = "proposer-model"
 CRITIC_MODEL_NAME = "critic-model"
+
+# Dataset Features
+FEATURE_NAMES = os.getenv("FEATURE_NAMES", "age,gender,polyuria,polydipsia,sudden_weight_loss,weakness,polyphagia,genital_thrush,visual_blurring,itching,irritability,delayed_healing,partial_paresis,muscle_stiffness,alopecia,obesity").split(",")
