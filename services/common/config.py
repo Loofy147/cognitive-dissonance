@@ -66,6 +66,16 @@ TASKS = {
         "proposer_model_name": "proposer-heart_failure",
         "critic_model_name": "critic-heart_failure",
         "dataset_path": "data/heart_failure/heart_failure_data.csv"
+    },
+    "breast_cancer": {
+        "feature_names": [
+                "radius_mean", "texture_mean", "perimeter_mean", "area_mean",
+                "smoothness_mean", "compactness_mean", "concavity_mean",
+                "concave points_mean", "symmetry_mean", "fractal_dimension_mean"
+        ],
+        "proposer_model_name": "proposer-breast_cancer",
+        "critic_model_name": "critic-breast_cancer",
+        "dataset_path": "data/breast_cancer/breast_cancer_data.csv"
     }
 }
 

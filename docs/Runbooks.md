@@ -109,3 +109,41 @@ This document provides a set of one-page runbooks for key operational tasks.
     *   Conduct a post-mortem to identify the lessons learned from the incident.
     *   Update the incident response plan and any other relevant documentation.
     *   Implement any necessary changes to prevent similar incidents from happening in the future.
+
+# Kaggle-Driven Continuous Learning Runbook
+
+This runbook describes how to use Kaggle resources to train and improve the Self-Cognitive-Dissonance System.
+
+## 1. Ingesting a New Dataset
+
+To add a new classification task from Kaggle:
+1. Obtain the dataset reference (e.g., `user/dataset-name`).
+2. Run the ingestor script:
+   ```bash
+   export KAGGLE_API_TOKEN=your_token
+   python scripts/kaggle_ingestor.py user/dataset-name my_new_task
+   ```
+3. Follow the script's output to add the new entry to `TASKS` in `services/common/config.py`.
+
+## 2. Initial Training
+
+Once a task is configured, train the initial proposer and critic models:
+```bash
+python scripts/create_models.py
+```
+This registers models in MLflow and promotes them to the `production` alias.
+
+## 3. Retraining Loop (Continuous Learning)
+
+The system automatically collects "dissonant" samples (where models disagree) in the Postgres database. To improve the models based on this data:
+1. Run the retraining script:
+   ```bash
+   python scripts/retrain_models.py
+   ```
+2. This script fetches the dissonant samples, combines them with original data, trains new versions, and promotes them if they show improvement.
+
+## 4. Monitoring
+
+Monitor the system using the `auditor` service:
+- Endpoint: `POST /audit`
+- It checks for model availability across all tasks, MLflow connectivity, and service health.
