@@ -1,29 +1,32 @@
+import json
 import os
 import sys
-import pandas as pd
-import psycopg2
-import json
+
 import mlflow
 import mlflow.sklearn
-from sklearn.neural_network import MLPClassifier
+import pandas as pd
+import psycopg2
 from dotenv import load_dotenv
+from sklearn.neural_network import MLPClassifier
 
 # Add the project root to the Python path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, project_root)
 
 # Load environment variables
 load_dotenv()
 
-from services.common import config
+from services.common import config  # noqa: E402  # noqa: E402
+
 
 def get_db_connection():
     return psycopg2.connect(
         host=os.getenv("POSTGRES_HOST", "localhost"),
         database=os.getenv("POSTGRES_DB", "cd_meta"),
         user=os.getenv("POSTGRES_USER", "cd_user"),
-        password=os.getenv("POSTGRES_PASSWORD", "cd_pass")
+        password=os.getenv("POSTGRES_PASSWORD", "cd_pass"),
     )
+
 
 def retrain_task(task_id):
     """
@@ -50,12 +53,14 @@ def retrain_task(task_id):
         print(f"Found {len(dissonant_df)} dissonant samples to learn from.")
 
         # Parse JSON features and flatten
-        features_list = [json.loads(f) if isinstance(f, str) else f for f in dissonant_df['features']]
+        features_list = [
+            json.loads(f) if isinstance(f, str) else f for f in dissonant_df["features"]
+        ]
         d_features_df = pd.DataFrame(features_list)
 
         # For simplicity, we use the critic's prediction as the 'silver' label for re-training
         # in a real system we'd use ground truth or a more complex meta-learner.
-        d_features_df[target_col] = (dissonant_df['label'] > 0.5).astype(int)
+        d_features_df[target_col] = (dissonant_df["label"] > 0.5).astype(int)
 
         # Combine
         combined_df = pd.concat([original_df, d_features_df], ignore_index=True)
@@ -77,7 +82,9 @@ def retrain_task(task_id):
             print(f"Training {model_type} model...")
 
             # Simple hyperparam search or just re-training
-            model = MLPClassifier(hidden_layer_sizes=(16, 16), max_iter=1000, random_state=42)
+            model = MLPClassifier(
+                hidden_layer_sizes=(16, 16), max_iter=1000, random_state=42
+            )
             model.fit(X, y)
 
             model_info = mlflow.sklearn.log_model(
@@ -89,13 +96,18 @@ def retrain_task(task_id):
             client.set_registered_model_alias(
                 name=model_name,
                 alias="production",
-                version=model_info.registered_model_version
+                version=model_info.registered_model_version,
             )
-            print(f"Promoted {model_name} version {model_info.registered_model_version} to production.")
+            print(
+                f"Promoted {model_name} version {model_info.registered_model_version} to production."
+            )
+
 
 if __name__ == "__main__":
     # Ensure S3 endpoint is set for MinIO
-    os.environ["MLFLOW_S3_ENDPOINT_URL"] = f"http://{os.getenv('MLFLOW_HOST', 'localhost')}:9000"
+    os.environ["MLFLOW_S3_ENDPOINT_URL"] = (
+        f"http://{os.getenv('MLFLOW_HOST', 'localhost')}:9000"
+    )
     os.environ["AWS_ACCESS_KEY_ID"] = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
     os.environ["AWS_SECRET_ACCESS_KEY"] = os.getenv("MINIO_SECRET_KEY", "minioadmin")
 

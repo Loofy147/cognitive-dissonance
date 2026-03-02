@@ -1,29 +1,50 @@
+import datetime
+import importlib  # noqa: F401  # noqa: F401
+import os
+import sys
+from unittest.mock import MagicMock, patch
+
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
-import datetime
-import sys
-import os
-import importlib
 
 # Add the project root to the Python path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from services.auditor.main import app
-from services.common import config
+from services.common import config  # noqa: E402
+
 
 @pytest.fixture
 def mock_httpx(httpx_mock):
     return httpx_mock
 
+
 def test_audit_endpoint(mock_httpx):
     # Mock MLflow check to pass
     with patch("services.auditor.main._check_mlflow_connectivity", return_value=None):
         for service, url in config.HEALTH_CHECK_URLS.items():
-            mock_httpx.add_response(url=url, method="GET", json={"status": "ok", "last_run_timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()})
+            mock_httpx.add_response(
+                url=url,
+                method="GET",
+                json={
+                    "status": "ok",
+                    "last_run_timestamp": datetime.datetime.now(
+                        datetime.timezone.utc
+                    ).isoformat(),
+                },
+            )
 
         # Second health check for evaluator liveness
-        mock_httpx.add_response(url=config.HEALTH_CHECK_URLS["evaluator"], method="GET", json={"status": "ok", "last_run_timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()})
+        mock_httpx.add_response(
+            url=config.HEALTH_CHECK_URLS["evaluator"],
+            method="GET",
+            json={
+                "status": "ok",
+                "last_run_timestamp": datetime.datetime.now(
+                    datetime.timezone.utc
+                ).isoformat(),
+            },
+        )
 
         for service, url in config.CONFIG_URLS.items():
             mock_httpx.add_response(url=url, method="GET", json={"valid": True})
