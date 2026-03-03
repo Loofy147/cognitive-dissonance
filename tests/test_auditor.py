@@ -1,8 +1,7 @@
 import datetime
-import importlib  # noqa: F401  # noqa: F401
 import os
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,7 +9,7 @@ from fastapi.testclient import TestClient
 # Add the project root to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from services.auditor.main import app
+from services.auditor.main import app  # noqa: E402
 from services.common import config  # noqa: E402
 
 

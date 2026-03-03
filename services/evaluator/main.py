@@ -149,7 +149,7 @@ def get_config():
     }
 
 
-from pydantic import BaseModel
+from pydantic import BaseModel  # noqa: E402  # noqa: E402
 
 
 class RunOnceRequest(BaseModel):

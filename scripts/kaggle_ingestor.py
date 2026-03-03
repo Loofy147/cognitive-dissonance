@@ -9,8 +9,6 @@ from kaggle.api.kaggle_api_extended import KaggleApi
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, project_root)
 
-from services.common import config  # noqa: E402  # noqa: E402
-
 
 def ingest_dataset(dataset_ref, task_id, sep=","):
     """

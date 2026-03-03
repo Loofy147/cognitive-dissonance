@@ -8,7 +8,7 @@ import requests
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 sys.path.insert(0, project_root)
 
-from services.common import config  # noqa: E402  # noqa: E402
+from services.common import config  # noqa: E402  # noqa: E402  # noqa: E402
 
 EVALUATOR_URL = os.environ.get("EVALUATOR_URL", "http://evaluator:8000/run_once")
 

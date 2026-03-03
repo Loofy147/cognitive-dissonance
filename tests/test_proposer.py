@@ -1,7 +1,7 @@
 import importlib  # noqa: F401  # noqa: F401
 import os
 import sys
-from unittest.mock import ANY, patch
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 # Add the project root to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from services.common import config  # noqa: E402
+from services.common import config  # noqa: E402  # noqa: E402
 
 
 @pytest.fixture
@@ -19,7 +19,7 @@ def client():
     with patch("mlflow.pyfunc.load_model") as mock_load_model:
         # Mock the metadata attribute of the loaded model
         mock_load_model.return_value.metadata.run_id = "test-run-id"
-        from services.proposer.main import app
+        from services.proposer.main import app  # noqa: E402
 
         # Use context manager to trigger lifespan
         with TestClient(app) as test_client:

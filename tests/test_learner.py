@@ -1,7 +1,7 @@
 import importlib  # noqa: F401  # noqa: F401
 import os
 import sys
-from unittest.mock import ANY, patch
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -16,7 +16,7 @@ def client():
     with patch("services.learner.main.mlflow"), patch(
         "services.learner.main.psycopg2.connect"
     ):
-        from services.learner.main import app
+        from services.learner.main import app  # noqa: E402
 
         # DO NOT RELOAD, just use if already loaded or load fresh once
         # importlib.reload(sys.modules['services.learner.main'])

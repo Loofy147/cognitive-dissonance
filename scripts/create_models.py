@@ -16,7 +16,7 @@ sys.path.insert(0, project_root)
 # Load environment variables
 load_dotenv()
 
-from services.common import config  # noqa: E402  # noqa: E402
+from services.common import config  # noqa: E402  # noqa: E402  # noqa: E402
 
 
 def ensure_bucket_exists(bucket_name):

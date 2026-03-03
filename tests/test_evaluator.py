@@ -9,13 +9,13 @@ from fastapi.testclient import TestClient
 # Add the project root to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from services.common import config  # noqa: E402
+from services.common import config  # noqa: E402  # noqa: E402
 
 
 @pytest.fixture
 def client():
     """Provides a test client for the evaluator service."""
-    from services.evaluator.main import app
+    from services.evaluator.main import app  # noqa: E402
 
     importlib.reload(sys.modules["services.evaluator.main"])
     # The TestClient must be used in a `with` statement to trigger lifespan events.
@@ -47,7 +47,7 @@ def test_config_endpoint(client):
 @patch("services.evaluator.main.httpx.AsyncClient")
 def test_run_once_endpoint(mock_async_client):
     """Tests the /run_once endpoint, mocking the downstream service calls."""
-    from services.evaluator.main import app
+    from services.evaluator.main import app  # noqa: E402
 
     importlib.reload(sys.modules["services.evaluator.main"])
 
@@ -82,7 +82,7 @@ def test_client_is_reused_across_requests(mock_async_client):
     """
     Tests that the httpx.AsyncClient is reused across multiple requests.
     """
-    from services.evaluator.main import app
+    from services.evaluator.main import app  # noqa: E402
 
     importlib.reload(sys.modules["services.evaluator.main"])
 
