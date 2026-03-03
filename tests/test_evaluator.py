@@ -1,21 +1,27 @@
+import importlib  # noqa: F401  # noqa: F401
+import os
+import sys
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 from fastapi.testclient import TestClient
-import sys
-import os
-import importlib
-from unittest.mock import patch, MagicMock
 
 # Add the project root to the Python path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from services.common import config  # noqa: E402  # noqa: E402
+
 
 @pytest.fixture
 def client():
     """Provides a test client for the evaluator service."""
-    from services.evaluator.main import app
-    importlib.reload(sys.modules['services.evaluator.main'])
+    from services.evaluator.main import app  # noqa: E402
+
+    importlib.reload(sys.modules["services.evaluator.main"])
     # The TestClient must be used in a `with` statement to trigger lifespan events.
     with TestClient(app) as test_client:
         yield test_client
+
 
 def test_health_endpoint(client):
     """Tests that the /health endpoint is available."""
@@ -24,6 +30,7 @@ def test_health_endpoint(client):
     data = response.json()
     assert data["status"] == "ok"
     assert "last_run_timestamp" in data
+
 
 def test_config_endpoint(client):
     """Tests that the /config endpoint returns the correct configuration."""
@@ -36,11 +43,13 @@ def test_config_endpoint(client):
     assert "safety_gate_url" in config_data
     assert "loop_timeout_seconds" in config_data
 
+
 @patch("services.evaluator.main.httpx.AsyncClient")
 def test_run_once_endpoint(mock_async_client):
     """Tests the /run_once endpoint, mocking the downstream service calls."""
-    from services.evaluator.main import app
-    importlib.reload(sys.modules['services.evaluator.main'])
+    from services.evaluator.main import app  # noqa: E402
+
+    importlib.reload(sys.modules["services.evaluator.main"])
 
     # Create a mock response object
     mock_response = MagicMock()
@@ -50,7 +59,7 @@ def test_run_once_endpoint(mock_async_client):
         "input_id": "mock_id",
         "predictions": [],
         "contradictory": [],
-        "allow": True, # For safety gate
+        "allow": True,  # For safety gate
     }
 
     # The post method is async, so its return value should be our mock_response
@@ -58,22 +67,24 @@ def test_run_once_endpoint(mock_async_client):
     mock_async_client.return_value.aclose = AsyncMock()
 
     with TestClient(app) as client:
-        response = client.post("/run_once")
+        # Generate valid features for test
+        features = {name: 0.0 for name in config.FEATURE_NAMES}
+        response = client.post("/run_once", json={"features": features})
 
     assert response.status_code == 200
     response_data = response.json()
-    assert response_data['status'] == 'completed'
-    assert 'input_id' in response_data
+    assert response_data["status"] == "completed"
+    assert "input_id" in response_data
 
-from unittest.mock import patch, MagicMock, AsyncMock
 
 @patch("services.evaluator.main.httpx.AsyncClient")
 def test_client_is_reused_across_requests(mock_async_client):
     """
     Tests that the httpx.AsyncClient is reused across multiple requests.
     """
-    from services.evaluator.main import app
-    importlib.reload(sys.modules['services.evaluator.main'])
+    from services.evaluator.main import app  # noqa: E402
+
+    importlib.reload(sys.modules["services.evaluator.main"])
 
     mock_response = MagicMock()
     mock_response.json.return_value = {
@@ -86,9 +97,10 @@ def test_client_is_reused_across_requests(mock_async_client):
     mock_async_client.return_value.aclose = AsyncMock()
 
     with TestClient(app) as client:
+        features = {name: 0.0 for name in config.FEATURE_NAMES}
         # Make two requests
-        client.post("/run_once")
-        client.post("/run_once")
+        client.post("/run_once", json={"features": features})
+        client.post("/run_once", json={"features": features})
 
     # The client should be created once during the lifespan.
     assert mock_async_client.call_count == 1

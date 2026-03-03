@@ -1,67 +1,92 @@
-from fastapi import FastAPI, Request, HTTPException
-from pydantic import BaseModel
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
-import uvicorn
+import logging
+import math
+import os
+import sys
+import time
+from contextlib import asynccontextmanager
+from typing import Any, Dict, Optional
+
 import mlflow
 import numpy as np
 import pandas as pd
-import logging
-import sys
-import math
-import time
-from contextlib import asynccontextmanager
-from services.common.metrics import instrument_request
-from services.common.logging_config import configure_logging
+import uvicorn
+from fastapi import FastAPI, HTTPException, Request
+from pydantic import BaseModel
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+
 from services.common import config
+from services.common.logging_config import configure_logging
+from services.common.metrics import instrument_request
 
 # Configure logging
 configure_logging()
-logger = logging.getLogger('proposer')
-SERVICE_NAME = 'proposer'
+logger = logging.getLogger("proposer")
+SERVICE_NAME = "proposer"
 
 limiter = Limiter(key_func=get_remote_address)
 
+
+class ProposerState:
+    def __init__(self):
+        self.models: Dict[str, Any] = {}
+        self.model_versions: Dict[str, str] = {}
+
+    def load_task_model(self, task_id: str):
+        task_cfg = config.get_task_config(task_id)
+        model_name = task_cfg["proposer_model_name"]
+        model_uri = f"models:/{model_name}@production"
+
+        logger.info(f"Attempting to load model for task '{task_id}': {model_uri}")
+
+        for attempt in range(5):
+            try:
+                model = mlflow.pyfunc.load_model(model_uri)
+                self.models[task_id] = model
+                self.model_versions[task_id] = model.metadata.run_id
+                logger.info(
+                    f"Model for task '{task_id}' loaded. Version: {self.model_versions[task_id]}"
+                )
+                return True
+            except Exception as e:
+                logger.warning(
+                    f"Attempt {attempt + 1} failed for task '{task_id}': {e}. Retrying..."
+                )
+                time.sleep(5)
+        return False
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Manages the application's lifespan. The model is loaded from the MLflow
-    Model Registry on startup, with a retry mechanism to handle potential
-    delays in model availability.
-    """
+    """Loads all models from the TASKS config on startup."""
     mlflow.set_tracking_uri(config.MLFLOW_TRACKING_URI)
-    model_uri = f"models:/{config.PROPOSER_MODEL_NAME}@production"
-    logger.info(f"Attempting to load model from MLflow: {model_uri}")
+    app.state.proposer = ProposerState()
 
-    model = None
-    for attempt in range(5): # Retry up to 5 times
-        try:
-            model = mlflow.pyfunc.load_model(model_uri)
-            app.state.model = model
-            app.state.model_version = model.metadata.run_id
-            logger.info(f"Model loaded successfully on attempt {attempt + 1}. Version: {app.state.model_version}")
-            break # Exit loop on success
-        except Exception as e:
-            logger.warning(f"Attempt {attempt + 1} failed to load model: {e}. Retrying in 5 seconds...")
-            time.sleep(5)
+    success = True
+    for task_id in config.TASKS.keys():
+        if not app.state.proposer.load_task_model(task_id):
+            logger.error(f"CRITICAL: Failed to load model for task '{task_id}'.")
+            success = False
 
-    if model is None:
-        logger.critical("Failed to load model after multiple attempts. Service cannot start.")
+    if not success and not os.getenv("TEST_MODE"):
+        logger.critical("Failed to load required models. Service cannot start.")
         sys.exit(1)
 
     yield
+    app.state.proposer = None
 
-    app.state.model = None
-    app.state.model_version = None
 
 app = FastAPI(lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+
 class Input(BaseModel):
     input_id: str
     features: dict
+    task_id: Optional[str] = config.DEFAULT_TASK
+
 
 @app.middleware("http")
 @limiter.limit("100/minute")
@@ -69,50 +94,68 @@ async def add_metrics(request: Request, call_next):
     instrument_request(SERVICE_NAME, request.url.path, request.method)
     return await call_next(request)
 
-@app.get('/health')
-def health(request: Request):
-    if hasattr(request.app.state, 'model') and request.app.state.model is not None:
-        return {'status': 'ok'}
-    else:
-        raise HTTPException(status_code=503, detail="Service is unhealthy: Model not loaded.")
 
-@app.get('/config')
+@app.get("/health")
+def health(request: Request):
+    return {"status": "ok"}
+
+
+@app.get("/config")
 def get_config(request: Request):
     return {
-        "model_name": config.PROPOSER_MODEL_NAME,
-        "model_version": getattr(request.app.state, 'model_version', 'N/A'),
+        "tasks": list(config.TASKS.keys()),
         "mlflow_tracking_uri": config.MLFLOW_TRACKING_URI,
     }
 
-@app.post('/predict')
+
+@app.post("/predict")
 async def predict(item: Input, request: Request):
     try:
-        model = request.app.state.model
-        model_version = request.app.state.model_version
+        task_id = item.task_id or config.DEFAULT_TASK
+        task_cfg = config.get_task_config(task_id)
 
-        ordered_feature_names = ['f1', 'f2']
+        model = request.app.state.proposer.models.get(task_id)
+        model_version = request.app.state.proposer.model_versions.get(task_id)
+
+        if model is None:
+            raise HTTPException(
+                status_code=404, detail=f"Model for task '{task_id}' not loaded."
+            )
+
+        ordered_feature_names = task_cfg["feature_names"]
         feature_values = []
         for k in ordered_feature_names:
             value = item.features.get(k)
-            if value is None: raise KeyError(f"Missing feature: {k}")
+            if value is None:
+                raise KeyError(f"Missing feature: {k}")
             if not isinstance(value, (int, float)) or not math.isfinite(value):
-                raise HTTPException(status_code=422, detail=f"Invalid value for feature '{k}'.")
+                raise HTTPException(
+                    status_code=422, detail=f"Invalid value for feature '{k}'."
+                )
             feature_values.append(value)
 
         features_array = np.array(feature_values).reshape(1, -1)
-
         input_df = pd.DataFrame(features_array, columns=ordered_feature_names)
 
         probabilities = model.predict(input_df)
         p0 = float(probabilities[0])
         p1 = 1.0 - p0
 
-        logger.info({'event': 'predict', 'input_id': item.input_id, 'p0': p0, 'p1': p1})
+        logger.info(
+            {
+                "event": "predict",
+                "task_id": task_id,
+                "input_id": item.input_id,
+                "p0": p0,
+                "p1": p1,
+            }
+        )
 
         return {
-            'input_id': item.input_id,
-            'predictions': [{'class': 'A', 'p': p0}, {'class': 'B', 'p': p1}],
-            'model_version': model_version
+            "input_id": item.input_id,
+            "task_id": task_id,
+            "predictions": [{"class": "A", "p": p0}, {"class": "B", "p": p1}],
+            "model_version": model_version,
         }
     except KeyError as e:
         logger.error(f"Missing feature in payload: {e}")
@@ -121,5 +164,6 @@ async def predict(item: Input, request: Request):
         logger.error(f"Prediction failed: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
 
-if __name__ == '__main__':
-    uvicorn.run(app, host='0.0.0.0', port=8000)
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)

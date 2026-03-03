@@ -1,29 +1,31 @@
-from fastapi import FastAPI
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
-import uvicorn
-import logging
 import json
+import logging
 import os
+
+import uvicorn
+from fastapi import FastAPI, Request
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+
+from services.common import config
 from services.common.logging_config import configure_logging
 from services.common.metrics import instrument_request
-from fastapi import Request
-from services.common import config
 
 configure_logging()
-logger = logging.getLogger('meta-controller')
+logger = logging.getLogger("meta-controller")
 limiter = Limiter(key_func=get_remote_address)
 app = FastAPI()
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-SERVICE_NAME='meta-controller'
+SERVICE_NAME = "meta-controller"
+
 
 def _load_policy():
     """Loads policy from JSON file, or returns default if not found."""
     if os.path.exists(config.POLICY_FILE_PATH):
         try:
-            with open(config.POLICY_FILE_PATH, 'r') as f:
+            with open(config.POLICY_FILE_PATH, "r") as f:
                 logger.info(f"Loading policy from {config.POLICY_FILE_PATH}")
                 return json.load(f)
         except (IOError, json.JSONDecodeError) as e:
@@ -31,11 +33,12 @@ def _load_policy():
 
     logger.info("Policy file not found, using default policy.")
     return {
-        'D_target': config.D_TARGET,
-        'lambda_max': config.LAMBDA_MAX,
-        'KL_eps': config.KL_EPS,
-        'd_budget_per_hour': config.D_BUDGET_PER_HOUR
+        "D_target": config.D_TARGET,
+        "lambda_max": config.LAMBDA_MAX,
+        "KL_eps": config.KL_EPS,
+        "d_budget_per_hour": config.D_BUDGET_PER_HOUR,
     }
+
 
 def _save_policy(policy_data: dict):
     """Saves policy to JSON file."""
@@ -45,14 +48,16 @@ def _save_policy(policy_data: dict):
         if policy_dir:
             os.makedirs(policy_dir, exist_ok=True)
 
-        with open(config.POLICY_FILE_PATH, 'w') as f:
+        with open(config.POLICY_FILE_PATH, "w") as f:
             json.dump(policy_data, f, indent=4)
             logger.info(f"Policy saved to {config.POLICY_FILE_PATH}")
     except IOError as e:
         logger.error(f"Could not write policy to file: {e}")
 
+
 # Load initial policy
 policy = _load_policy()
+
 
 @app.middleware("http")
 @limiter.limit("100/minute")
@@ -60,11 +65,13 @@ async def add_metrics(request: Request, call_next):
     instrument_request(SERVICE_NAME, request.url.path, request.method)
     return await call_next(request)
 
-@app.get('/health')
-def health():
-    return {'status':'ok'}
 
-@app.get('/config')
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+@app.get("/config")
 def get_config():
     """Returns non-sensitive service configuration."""
     return {
@@ -75,16 +82,19 @@ def get_config():
         "d_budget_per_hour": config.D_BUDGET_PER_HOUR,
     }
 
-@app.get('/policy')
+
+@app.get("/policy")
 async def get_policy():
     return policy
 
-@app.post('/policy')
+
+@app.post("/policy")
 async def set_policy(p: dict):
     policy.update(p)
     _save_policy(policy)
-    logger.info({'event':'policy_update', 'policy': policy})
-    return {'status':'ok', 'policy': policy}
+    logger.info({"event": "policy_update", "policy": policy})
+    return {"status": "ok", "policy": policy}
 
-if __name__ == '__main__':
-    uvicorn.run(app, host='0.0.0.0', port=8000)
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)

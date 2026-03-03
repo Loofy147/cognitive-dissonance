@@ -1,14 +1,16 @@
 import os
 import sys
-from dotenv import load_dotenv
+
 import mlflow
+from dotenv import load_dotenv
 
 # Add the project root to the Python path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, project_root)
 load_dotenv()
 
-from services.common import config
+from services.common import config  # noqa: E402  # noqa: E402  # noqa: E402
+
 
 def inspect_model_registry():
     """
@@ -39,14 +41,20 @@ def inspect_model_registry():
         print("\n--- Inspection Complete ---")
 
     except Exception as e:
-        print(f"An error occurred while inspecting the model registry: {e}", file=sys.stderr)
+        print(
+            f"An error occurred while inspecting the model registry: {e}",
+            file=sys.stderr,
+        )
         sys.exit(1)
+
 
 if __name__ == "__main__":
     # Set credentials and endpoint URL for MinIO/S3
     os.environ["AWS_ACCESS_KEY_ID"] = os.getenv("MINIO_ACCESS_KEY")
     os.environ["AWS_SECRET_ACCESS_KEY"] = os.getenv("MINIO_SECRET_KEY")
-    os.environ["MLFLOW_S3_ENDPOINT_URL"] = f"http://{os.getenv('MLFLOW_HOST', 'localhost')}:9000"
+    os.environ["MLFLOW_S3_ENDPOINT_URL"] = (
+        f"http://{os.getenv('MLFLOW_HOST', 'localhost')}:9000"
+    )
 
     # Set the MLflow tracking URI
     mlflow.set_tracking_uri(config.MLFLOW_TRACKING_URI)

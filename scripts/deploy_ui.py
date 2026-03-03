@@ -1,11 +1,18 @@
-from huggingface_hub import HfApi, create_repo
-import os
 import argparse
 
+from huggingface_hub import HfApi, create_repo
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Deploy the Gradio UI to Hugging Face Spaces.")
-    parser.add_argument("--hf-token", required=True, help="Your Hugging Face API token.")
-    parser.add_argument("--evaluator-url", required=True, help="The URL of the evaluator service.")
+    parser = argparse.ArgumentParser(
+        description="Deploy the Gradio UI to Hugging Face Spaces."
+    )
+    parser.add_argument(
+        "--hf-token", required=True, help="Your Hugging Face API token."
+    )
+    parser.add_argument(
+        "--evaluator-url", required=True, help="The URL of the evaluator service."
+    )
     args = parser.parse_args()
 
     api = HfApi()
@@ -48,6 +55,7 @@ def main():
     except Exception as e:
         print(f"Failed to deploy to Hugging Face: {e}")
         exit(1)
+
 
 if __name__ == "__main__":
     main()
