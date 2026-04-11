@@ -1,8 +1,6 @@
 import asyncio
 import datetime
 import logging
-import os
-from typing import Optional
 
 import httpx
 import mlflow
