@@ -1,1 +1,14 @@
-{"base_model_name_or_path": "nvidia/nemotron-3-nano-30b", "peft_type": "LORA", "r": 32, "lora_alpha": 64, "target_modules": ["q_proj", "v_proj"]}
+{
+    "base_model_name_or_path": "nvidia/nemotron-3-nano-30b",
+    "peft_type": "LORA",
+    "r": 32,
+    "lora_alpha": 64,
+    "target_modules": [
+        "q_proj",
+        "v_proj"
+    ],
+    "fan_in_fan_out": false,
+    "bias": "none",
+    "modules_to_save": null,
+    "task_type": "CAUSAL_LM"
+}

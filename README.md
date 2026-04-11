@@ -63,6 +63,27 @@ You can tail the logs of all services to see the system in action:
 sudo docker compose logs -f evaluator proposer critic learner meta-controller safety-gate
 ```
 
+
+## NVIDIA Nemotron Challenge Integration
+
+The system now supports the **NVIDIA Nemotron Model Reasoning Challenge**.
+
+### 1. Ingest Dataset
+Download and prepare the Nemotron training data:
+```bash
+python scripts/nemotron_ingestor.py
+```
+
+### 2. Fine-tuning (LoRA)
+Run the LoRA training script to generate a compatible adapter (rank 32):
+```bash
+python scripts/train_nemotron_lora.py
+```
+This will create a `submission.zip` file ready for Kaggle.
+
+### 3. Running the Dissonance Loop
+The `evaluator` service will automatically include the `nemotron_reasoning` task in its loop, sampling prompts from the dataset and calculating dissonance between the proposer and critic.
+
 ## Running Tests
 
 The repository includes an integration test suite. With the services running, execute the tests using `pytest`:
