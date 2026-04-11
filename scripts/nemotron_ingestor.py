@@ -1,10 +1,12 @@
 import os
 import sys
+
 import pandas as pd
 
 # Add the project root to the Python path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, project_root)
+
 
 def ingest_nemotron():
     print("Ingesting Nemotron dataset...")
@@ -23,6 +25,7 @@ def ingest_nemotron():
     # For now, we ensure it is accessible to the system.
 
     print("Nemotron ingestion complete.")
+
 
 if __name__ == "__main__":
     ingest_nemotron()

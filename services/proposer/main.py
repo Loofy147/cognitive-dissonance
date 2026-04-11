@@ -132,7 +132,7 @@ async def predict(item: Input, request: Request):
 
             # For the POC, we return a mock prediction
             # In a real scenario, this would call the LLM
-            p0 = 0.85 # High confidence in reasoning
+            p0 = 0.85  # High confidence in reasoning
             p1 = 1.0 - p0
         else:
             feature_values = []

@@ -1,6 +1,8 @@
 import asyncio
 import datetime
-from contextlib import asynccontextmanager
+import logging
+import os
+from typing import Optional
 
 import httpx
 import mlflow
@@ -8,76 +10,72 @@ import uvicorn
 from fastapi import FastAPI, Request
 
 from services.common import config
+from services.common.logging_config import configure_logging
 
-# Define a threshold for the evaluator loop.
-EVALUATOR_LOOP_STUCK_THRESHOLD_SECONDS = config.EVALUATOR_LOOP_TIMEOUT_SECONDS * 1.5
+configure_logging()
+logger = logging.getLogger("auditor")
 
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Initialize the client on startup
-    async with httpx.AsyncClient() as client:
-        app.state.http_client = client
-        yield
+app = FastAPI()
 
 
-app = FastAPI(lifespan=lifespan)
-SERVICE_NAME = "auditor"
+@app.on_event("startup")
+async def startup_event():
+    app.state.http_client = httpx.AsyncClient()
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await app.state.http_client.aclose()
 
 
 async def _check_mlflow_connectivity():
-    """Checks if the MLflow tracking server is reachable."""
     try:
         mlflow.set_tracking_uri(config.MLFLOW_TRACKING_URI)
         mlflow.search_experiments()
-        return None
     except Exception as e:
         return {
-            "id": "MLFLOW_UNREACHABLE",
+            "id": "MLFLOW_CONNECTIVITY_FAILED",
             "detail": f"Could not connect to MLflow at {config.MLFLOW_TRACKING_URI}: {e}",
         }
+    return None
 
 
-async def _check_evaluator_liveness(client: httpx.AsyncClient):
-    """Checks if the evaluator's main loop is running."""
-    url = config.HEALTH_CHECK_URLS.get("evaluator")
-    if not url:
-        return {
-            "id": "CONFIG_MISSING",
-            "detail": "Evaluator health check URL not configured.",
-        }
-
+async def _check_evaluator_liveness(client):
     try:
+        url = config.HEALTH_CHECK_URLS["evaluator"]
         response = await client.get(url, timeout=5.0)
         response.raise_for_status()
-        health_status = response.json()
-
-        last_run_iso = health_status.get("last_run_timestamp")
-        if not last_run_iso:
+        health_data = response.json()
+        last_run = health_data.get("last_run_timestamp")
+        if not last_run:
             return {
-                "id": "EVALUATOR_NOT_RUN",
-                "detail": "Evaluator has not completed a cycle yet.",
+                "id": "EVALUATOR_NO_RUN_HISTORY",
+                "detail": "Evaluator has not yet completed a run.",
             }
 
-        last_run_dt = datetime.datetime.fromisoformat(last_run_iso)
+        # Check if last run was within the last 5 minutes
+        last_run_dt = datetime.datetime.fromisoformat(last_run)
+        # Handle offset-naive vs offset-aware
         if last_run_dt.tzinfo is None:
-            last_run_dt = last_run_dt.replace(tzinfo=datetime.timezone.utc)
+            now = datetime.datetime.now()
+        else:
+            now = datetime.datetime.now(datetime.timezone.utc)
 
-        time_since_last_run = datetime.datetime.now(datetime.timezone.utc) - last_run_dt
-
-        if time_since_last_run.total_seconds() > EVALUATOR_LOOP_STUCK_THRESHOLD_SECONDS:
+        time_since_last_run = now - last_run_dt
+        if time_since_last_run.total_seconds() > 300:
+            msg = (
+                f"Evaluator loop seems stuck. "
+                f"Last run was {time_since_last_run.total_seconds():.0f}s ago."
+            )
             return {
                 "id": "EVALUATOR_STUCK",
-                "detail": f"Evaluator loop seems stuck. Last run was {time_since_last_run.total_seconds():.0f}s ago.",
+                "detail": msg,
             }
-    except httpx.RequestError:
-        return None
     except Exception as e:
         return {
             "id": "EVALUATOR_LIVENESS_CHECK_FAILED",
-            "detail": f"Error checking evaluator liveness: {e}",
+            "detail": f"Could not check evaluator liveness: {e}",
         }
-
     return None
 
 

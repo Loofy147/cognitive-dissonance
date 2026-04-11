@@ -16,7 +16,7 @@ sys.path.insert(0, project_root)
 # Load environment variables
 load_dotenv()
 
-from services.common import config  # noqa: E402  # noqa: E402  # noqa: E402
+from services.common import config  # noqa: E402
 
 
 def ensure_bucket_exists(bucket_name):
@@ -52,14 +52,13 @@ def train_and_register_model(model_name, run_name, X, y):
         )
 
         client = mlflow.tracking.MlflowClient()
+        v = model_info.registered_model_version
         client.set_registered_model_alias(
             name=model_name,
             alias="production",
-            version=model_info.registered_model_version,
+            version=v,
         )
-        print(
-            f"Promoted version {model_info.registered_model_version} of '{model_name}' to production."
-        )
+        print(f"Promoted version {v} of '{model_name}' to production.")
 
 
 if __name__ == "__main__":

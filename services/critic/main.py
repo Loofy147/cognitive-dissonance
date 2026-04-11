@@ -135,7 +135,7 @@ async def contradict(payload: ContradictPayload, request: Request):
 
             # For the POC, we return a mock prediction
             # In a real scenario, this would call the LLM or check for dissonance in reasoning
-            cp0 = 0.7 # Critic might be less certain
+            cp0 = 0.7  # Critic might be less certain
             cp1 = 1.0 - cp0
         else:
             feature_values = []
