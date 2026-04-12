@@ -52,11 +52,11 @@ def train():
             f.write(json.dumps(entry) + "\n")
 
     # Configure LoRA (Rank 32 for maximum capacity)
+    # regex matches are automatic for string inputs in this version of PEFT
     lora_config = LoraConfig(
         r=32,
         lora_alpha=64,
         target_modules=r".*\.(in_proj|out_proj|up_proj|down_proj)$",
-        is_target_modules_regex=True,
         lora_dropout=0.05,
         bias="none",
         task_type=TaskType.CAUSAL_LM,
@@ -73,7 +73,6 @@ def train():
         "r": 32,
         "lora_alpha": 64,
         "target_modules": r".*\.(in_proj|out_proj|up_proj|down_proj)$",
-        "is_target_modules_regex": True,
         "fan_in_fan_out": False,
         "bias": "none",
         "modules_to_save": None,
