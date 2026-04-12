@@ -31,7 +31,7 @@ def test_nemotron_proposer(mock_mlflow):
         assert response.status_code == 200
         data = response.json()
         assert data["task_id"] == "nemotron_reasoning"
-        assert data["predictions"][0]["p"] == 0.85
+        assert data["predictions"][0]["p"] == 0.5
 
 
 def test_nemotron_critic(mock_mlflow):

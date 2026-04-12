@@ -19,6 +19,7 @@ from slowapi.util import get_remote_address
 from services.common import config
 from services.common.logging_config import configure_logging
 from services.common.metrics import instrument_request
+from services.common.solvers import wonderland_solver
 
 # Configure logging
 configure_logging()
@@ -123,6 +124,7 @@ async def predict(item: Input, request: Request):
             )
 
         ordered_feature_names = task_cfg["feature_names"]
+        reasoning = None
 
         # Handle reasoning tasks (text-based)
         if task_id == "nemotron_reasoning":
@@ -130,9 +132,16 @@ async def predict(item: Input, request: Request):
             if not prompt:
                 raise KeyError("Missing feature: prompt")
 
-            # For the POC, we return a mock prediction
-            # In a real scenario, this would call the LLM
-            p0 = 0.85  # High confidence in reasoning
+            # Use wonderland_solver for real reasoning
+            answer = wonderland_solver(prompt)
+            if answer:
+                reasoning = (
+                    f"Based on the Wonderland rules, the answer is \\boxed{{{answer}}}"
+                )
+                p0 = 0.95  # High confidence when solver works
+            else:
+                reasoning = "The transformation rule is complex, but I predict a baseline value."
+                p0 = 0.5
             p1 = 1.0 - p0
         else:
             feature_values = []
@@ -167,6 +176,7 @@ async def predict(item: Input, request: Request):
             "input_id": item.input_id,
             "task_id": task_id,
             "predictions": [{"class": "A", "p": p0}, {"class": "B", "p": p1}],
+            "reasoning": reasoning,
             "model_version": model_version,
         }
     except KeyError as e:

@@ -19,6 +19,7 @@ from slowapi.util import get_remote_address
 from services.common import config
 from services.common.logging_config import configure_logging
 from services.common.metrics import instrument_request, set_d_value
+from services.common.solvers import wonderland_solver
 
 # Configure logging
 configure_logging()
@@ -133,9 +134,13 @@ async def contradict(payload: ContradictPayload, request: Request):
             if not prompt:
                 raise KeyError("Missing feature: prompt")
 
-            # For the POC, we return a mock prediction
-            # In a real scenario, this would call the LLM or check for dissonance in reasoning
-            cp0 = 0.7  # Critic might be less certain
+            # Critic uses the solver as a "truth" oracle to challenge the proposer
+            answer = wonderland_solver(prompt)
+            if answer:
+                # If proposer's confidence was high, let's see if we agree
+                cp0 = 0.9  # High confidence in solver result
+            else:
+                cp0 = 0.5  # Uncertain
             cp1 = 1.0 - cp0
         else:
             feature_values = []
