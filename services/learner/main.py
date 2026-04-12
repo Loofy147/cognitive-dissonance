@@ -48,7 +48,8 @@ async def lifespan(app: FastAPI):
         # Initialize DB table
         conn = get_db_connection()
         cur = conn.cursor()
-        cur.execute("""
+        cur.execute(
+            """
             CREATE TABLE IF NOT EXISTS dissonant_samples (
                 id SERIAL PRIMARY KEY,
                 task_id TEXT,
@@ -59,7 +60,8 @@ async def lifespan(app: FastAPI):
                 loss FLOAT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
-        """)
+        """
+        )
         conn.commit()
         cur.close()
         conn.close()

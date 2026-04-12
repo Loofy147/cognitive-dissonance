@@ -16,7 +16,7 @@ sys.path.insert(0, project_root)
 # Load environment variables
 load_dotenv()
 
-from services.common import config  # noqa: E402  # noqa: E402  # noqa: E402
+from services.common import config  # noqa: E402
 
 
 def get_db_connection():
@@ -42,7 +42,10 @@ def retrain_task(task_id):
     # 2. Fetch dissonant samples from DB
     try:
         conn = get_db_connection()
-        query = "SELECT features, contradiction->'contradictory'->0->'p' as label FROM dissonant_samples WHERE task_id = %s"
+        query = (
+            "SELECT features, contradiction->'contradictory'->0->'p' as label "
+            "FROM dissonant_samples WHERE task_id = %s"
+        )
         dissonant_df = pd.read_sql(query, conn, params=(task_id,))
         conn.close()
     except Exception as e:
@@ -93,14 +96,13 @@ def retrain_task(task_id):
 
             # 4. Promotion (Always promote in this POC)
             client = mlflow.tracking.MlflowClient()
+            v = model_info.registered_model_version
             client.set_registered_model_alias(
                 name=model_name,
                 alias="production",
-                version=model_info.registered_model_version,
+                version=v,
             )
-            print(
-                f"Promoted {model_name} version {model_info.registered_model_version} to production."
-            )
+            print(f"Promoted {model_name} version {v} to production.")
 
 
 if __name__ == "__main__":

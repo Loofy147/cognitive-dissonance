@@ -19,6 +19,7 @@ from slowapi.util import get_remote_address
 from services.common import config
 from services.common.logging_config import configure_logging
 from services.common.metrics import instrument_request, set_d_value
+from services.common.solvers import wonderland_solver
 
 # Configure logging
 configure_logging()
@@ -126,23 +127,39 @@ async def contradict(payload: ContradictPayload, request: Request):
 
         p0 = payload.predictions[0]["p"]
         ordered_feature_names = task_cfg["feature_names"]
-        feature_values = []
-        for k in ordered_feature_names:
-            value = payload.features.get(k)
-            if value is None:
-                raise KeyError(f"Missing feature: {k}")
-            if not isinstance(value, (int, float)) or not math.isfinite(value):
-                raise HTTPException(
-                    status_code=422, detail=f"Invalid value for feature '{k}'."
-                )
-            feature_values.append(value)
 
-        features_array = np.array(feature_values).reshape(1, -1)
-        input_df = pd.DataFrame(features_array, columns=ordered_feature_names)
+        # Handle reasoning tasks (text-based)
+        if task_id == "nemotron_reasoning":
+            prompt = payload.features.get("prompt")
+            if not prompt:
+                raise KeyError("Missing feature: prompt")
 
-        critic_probabilities = model.predict(input_df)
-        cp0 = float(critic_probabilities[0])
-        cp1 = 1.0 - cp0
+            # Critic uses the solver as a "truth" oracle to challenge the proposer
+            answer = wonderland_solver(prompt)
+            if answer:
+                # If proposer's confidence was high, let's see if we agree
+                cp0 = 0.9  # High confidence in solver result
+            else:
+                cp0 = 0.5  # Uncertain
+            cp1 = 1.0 - cp0
+        else:
+            feature_values = []
+            for k in ordered_feature_names:
+                value = payload.features.get(k)
+                if value is None:
+                    raise KeyError(f"Missing feature: {k}")
+                if not isinstance(value, (int, float)) or not math.isfinite(value):
+                    raise HTTPException(
+                        status_code=422, detail=f"Invalid value for feature '{k}'."
+                    )
+                feature_values.append(value)
+
+            features_array = np.array(feature_values).reshape(1, -1)
+            input_df = pd.DataFrame(features_array, columns=ordered_feature_names)
+
+            critic_probabilities = model.predict(input_df)
+            cp0 = float(critic_probabilities[0])
+            cp1 = 1.0 - cp0
 
         d = abs(p0 - cp0)
         set_d_value(SERVICE_NAME, d)

@@ -108,6 +108,12 @@ TASKS = {
         "critic_model_name": "critic-breast_cancer",
         "dataset_path": "data/breast_cancer/breast_cancer_data.csv",
     },
+    "nemotron_reasoning": {
+        "feature_names": ["prompt"],
+        "proposer_model_name": "proposer-nemotron",
+        "critic_model_name": "critic-nemotron",
+        "dataset_path": "data/nemotron/train.csv",
+    },
 }
 
 DEFAULT_TASK = os.getenv("DEFAULT_TASK", "diabetes")

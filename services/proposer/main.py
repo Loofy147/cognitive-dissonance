@@ -19,6 +19,7 @@ from slowapi.util import get_remote_address
 from services.common import config
 from services.common.logging_config import configure_logging
 from services.common.metrics import instrument_request
+from services.common.solvers import wonderland_solver
 
 # Configure logging
 configure_logging()
@@ -123,23 +124,43 @@ async def predict(item: Input, request: Request):
             )
 
         ordered_feature_names = task_cfg["feature_names"]
-        feature_values = []
-        for k in ordered_feature_names:
-            value = item.features.get(k)
-            if value is None:
-                raise KeyError(f"Missing feature: {k}")
-            if not isinstance(value, (int, float)) or not math.isfinite(value):
-                raise HTTPException(
-                    status_code=422, detail=f"Invalid value for feature '{k}'."
+        reasoning = None
+
+        # Handle reasoning tasks (text-based)
+        if task_id == "nemotron_reasoning":
+            prompt = item.features.get("prompt")
+            if not prompt:
+                raise KeyError("Missing feature: prompt")
+
+            # Use wonderland_solver for real reasoning
+            answer = wonderland_solver(prompt)
+            if answer:
+                reasoning = (
+                    f"Based on the Wonderland rules, the answer is \\boxed{{{answer}}}"
                 )
-            feature_values.append(value)
+                p0 = 0.95  # High confidence when solver works
+            else:
+                reasoning = "The transformation rule is complex, but I predict a baseline value."
+                p0 = 0.5
+            p1 = 1.0 - p0
+        else:
+            feature_values = []
+            for k in ordered_feature_names:
+                value = item.features.get(k)
+                if value is None:
+                    raise KeyError(f"Missing feature: {k}")
+                if not isinstance(value, (int, float)) or not math.isfinite(value):
+                    raise HTTPException(
+                        status_code=422, detail=f"Invalid value for feature '{k}'."
+                    )
+                feature_values.append(value)
 
-        features_array = np.array(feature_values).reshape(1, -1)
-        input_df = pd.DataFrame(features_array, columns=ordered_feature_names)
+            features_array = np.array(feature_values).reshape(1, -1)
+            input_df = pd.DataFrame(features_array, columns=ordered_feature_names)
 
-        probabilities = model.predict(input_df)
-        p0 = float(probabilities[0])
-        p1 = 1.0 - p0
+            probabilities = model.predict(input_df)
+            p0 = float(probabilities[0])
+            p1 = 1.0 - p0
 
         logger.info(
             {
@@ -155,6 +176,7 @@ async def predict(item: Input, request: Request):
             "input_id": item.input_id,
             "task_id": task_id,
             "predictions": [{"class": "A", "p": p0}, {"class": "B", "p": p1}],
+            "reasoning": reasoning,
             "model_version": model_version,
         }
     except KeyError as e:

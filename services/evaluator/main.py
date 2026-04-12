@@ -7,16 +7,17 @@ from typing import Optional
 
 import httpx
 import numpy as np
+import pandas as pd
 import uvicorn
 from fastapi import FastAPI, Request
+from pydantic import BaseModel
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from services.common import config  # noqa: E402  # noqa: E402
+from services.common import config
 from services.common.logging_config import configure_logging
-from services.common.metrics import (EVALUATION_LOOP_TIMEOUTS_TOTAL,
-                                     instrument_request)
+from services.common.metrics import EVALUATION_LOOP_TIMEOUTS_TOTAL, instrument_request
 
 configure_logging()
 logger = logging.getLogger("evaluator")
@@ -24,8 +25,22 @@ SERVICE_NAME = "evaluator"
 
 limiter = Limiter(key_func=get_remote_address)
 
+# Pre-load nemotron data for the loop
+try:
+    NEMOTRON_DF = pd.read_csv("data/nemotron/train.csv")
+    logger.info(
+        f"Evaluator loaded {len(NEMOTRON_DF)} samples for nemotron_reasoning task."
+    )
+except Exception as e:
+    logger.warning(f"Evaluator could not load nemotron data: {e}")
+    NEMOTRON_DF = None
 
-# This function contains the core orchestration logic
+
+class RunOnceRequest(BaseModel):
+    features: dict
+    task_id: Optional[str] = config.DEFAULT_TASK
+
+
 async def _run_orchestration_cycle(app: FastAPI, features: dict, task_id: str):
     input_id = str(uuid.uuid4())
 
@@ -70,17 +85,23 @@ async def evaluation_loop(app: FastAPI):
             # Cycle through tasks
             for task_id in config.TASKS.keys():
                 task_cfg = config.get_task_config(task_id)
-                features = {
-                    k: round(np.random.uniform(0, 1), 2)
-                    for k in task_cfg["feature_names"]
-                }
 
-                # Domain specific adjustments for diabetes
-                if task_id == "diabetes":
-                    if "age" in features:
-                        features["age"] = round(np.random.uniform(20, 80), 0)
-                    if "gender" in features:
-                        features["gender"] = float(np.random.choice([0, 1]))
+                if task_id == "nemotron_reasoning" and NEMOTRON_DF is not None:
+                    # Sample from the real dataset
+                    sample = NEMOTRON_DF.sample(1).iloc[0]
+                    features = {"prompt": sample["prompt"]}
+                else:
+                    features = {
+                        k: round(np.random.uniform(0, 1), 2)
+                        for k in task_cfg["feature_names"]
+                    }
+
+                    # Domain specific adjustments for diabetes
+                    if task_id == "diabetes":
+                        if "age" in features:
+                            features["age"] = round(np.random.uniform(20, 80), 0)
+                        if "gender" in features:
+                            features["gender"] = float(np.random.choice([0, 1]))
 
                 await asyncio.wait_for(
                     _run_orchestration_cycle(app, features, task_id),
@@ -147,14 +168,6 @@ def get_config():
         "safety_gate_url": config.SAFETY_URL,
         "loop_timeout_seconds": config.EVALUATOR_LOOP_TIMEOUT_SECONDS,
     }
-
-
-from pydantic import BaseModel  # noqa: E402  # noqa: E402
-
-
-class RunOnceRequest(BaseModel):
-    features: dict
-    task_id: Optional[str] = config.DEFAULT_TASK
 
 
 @app.post("/run_once")
