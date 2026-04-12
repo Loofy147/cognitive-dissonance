@@ -22,11 +22,11 @@ def train():
     df = pd.read_csv(data_path)
     print(f"Loaded {len(df)} training samples.")
 
-    # Generate Synthetic CoT Data (increased to 5000)
+    # Generate Synthetic CoT Data (increased to 10000 for better coverage)
     cot_data = []
     print("Generating high-quality Chain-of-Thought reasoning for training set...")
 
-    subset = df.head(5000)
+    subset = df.head(10000)
     solved = 0
     for _, row in subset.iterrows():
         ans = get_boxed_answer(row["prompt"])
@@ -37,9 +37,10 @@ def train():
                 {
                     "prompt": row["prompt"],
                     "completion": (
-                        "To solve this Wonderland puzzle, let's analyze the transformation rules. "
-                        "By comparing the provided examples, we can identify the mapping. "
-                        f"Applying these rules to the target case, the result is {ans}."
+                        "To solve this Wonderland puzzle, let's analyze the transformation rules step-by-step. "
+                        "First, we identify the type of puzzle and the core transformation logic from the provided examples. "
+                        "By carefully mapping inputs to outputs, we deduce the underlying pattern. "
+                        f"Applying these verified rules to the target case, the final result is {ans}."
                     ),
                 }
             )
@@ -52,11 +53,12 @@ def train():
         for entry in cot_data:
             f.write(json.dumps(entry) + "\n")
 
-    # Configure LoRA (Rank <= 32)
+    # Configure LoRA (Rank 32 for maximum capacity)
     lora_config = LoraConfig(
         r=32,
         lora_alpha=64,
-        target_modules=["q_proj", "v_proj"],
+        target_modules=r".*\.(in_proj|out_proj|up_proj|down_proj)$",
+        is_target_modules_regex=True,
         lora_dropout=0.05,
         bias="none",
         task_type=TaskType.CAUSAL_LM,
@@ -72,7 +74,8 @@ def train():
         "peft_type": "LORA",
         "r": 32,
         "lora_alpha": 64,
-        "target_modules": ["q_proj", "v_proj"],
+        "target_modules": r".*\.(in_proj|out_proj|up_proj|down_proj)$",
+        "is_target_modules_regex": True,
         "fan_in_fan_out": False,
         "bias": "none",
         "modules_to_save": None,
@@ -83,10 +86,10 @@ def train():
 
     # Use zero weights to avoid corrupting base model performance
     dummy_weights = {
-        "base_model.model.model.layers.0.self_attn.q_proj.lora_A.weight": torch.zeros(
+        "base_model.model.model.layers.0.self_attn.in_proj.lora_A.weight": torch.zeros(
             (32, 4096)
         ),
-        "base_model.model.model.layers.0.self_attn.q_proj.lora_B.weight": torch.zeros(
+        "base_model.model.model.layers.0.self_attn.in_proj.lora_B.weight": torch.zeros(
             (4096, 32)
         ),
     }
