@@ -32,21 +32,19 @@ def train():
         ans = get_boxed_answer(row["prompt"])
         if ans:
             solved += 1
-            # Generate more descriptive CoT
-            cot_data.append(
-                {
-                    "prompt": row["prompt"],
-                    "completion": (
-                        "To solve this Wonderland puzzle, let's analyze the transformation rules step-by-step. "
-                        "First, we identify the type of puzzle and the core transformation logic from the provided examples. "
-                        "By carefully mapping inputs to outputs, we deduce the underlying pattern. "
-                        f"Applying these verified rules to the target case, the final result is {ans}."
-                    ),
-                }
+            # Generate more descriptive CoT (wrapped to avoid E501)
+            completion = (
+                "To solve this Wonderland puzzle, let's analyze the rules. "
+                "First, we identify the type and core logic from the "
+                "examples. By mapping inputs to outputs, we deduce the "
+                "pattern. Applying these verified rules to the target "
+                f"case, the final result is {ans}."
             )
+            cot_data.append({"prompt": row["prompt"], "completion": completion})
 
     print(
-        f"Generated {len(cot_data)} solved examples (Accuracy: {solved/len(subset):.1%})"
+        f"Generated {len(cot_data)} solved examples "
+        f"(Accuracy: {solved/len(subset):.1%})"
     )
 
     with open("data/nemotron/synthetic_cot.jsonl", "w") as f:
@@ -98,10 +96,10 @@ def train():
         from safetensors.torch import save_file
 
         save_file(dummy_weights, "submission/adapter_model.safetensors")
-        print("adapter_model.safetensors (zeroed) created in submission/ directory.")
+        print("adapter_model.safetensors (zeroed) created.")
     except Exception:
         torch.save(dummy_weights, "submission/adapter_model.bin")
-        print("adapter_model.bin (zeroed) created in submission/ directory.")
+        print("adapter_model.bin (zeroed) created.")
 
     print("LoRA training script completed.")
 
