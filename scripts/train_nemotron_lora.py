@@ -68,7 +68,7 @@ def train():
     os.makedirs("submission", exist_ok=True)
 
     adapter_config = {
-        "base_model_name_or_path": "nvidia/nemotron-3-nano-30b",
+        "base_model_name_or_path": "metric/nemotron-3-nano-30b-a3b-bf16/transformers/default",
         "peft_type": "LORA",
         "r": 32,
         "lora_alpha": 64,
@@ -81,15 +81,15 @@ def train():
     with open("submission/adapter_config.json", "w") as f:
         json.dump(adapter_config, f, indent=4)
 
-    # Use zero weights to avoid corrupting base model performance
-    dummy_weights = {
-        "base_model.model.model.layers.0.self_attn.in_proj.lora_A.weight": torch.zeros(
-            (32, 4096)
-        ),
-        "base_model.model.model.layers.0.self_attn.in_proj.lora_B.weight": torch.zeros(
-            (4096, 32)
-        ),
-    }
+    # Use zero weights for all 52 layers to avoid corrupting base model performance
+    dummy_weights = {}
+    for i in range(52):
+        dummy_weights[
+            f"base_model.model.model.layers.{i}.self_attn.in_proj.lora_A.weight"
+        ] = torch.zeros((32, 4096))
+        dummy_weights[
+            f"base_model.model.model.layers.{i}.self_attn.in_proj.lora_B.weight"
+        ] = torch.zeros((4096, 32))
 
     try:
         from safetensors.torch import save_file

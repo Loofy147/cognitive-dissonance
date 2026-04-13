@@ -1,5 +1,5 @@
 {
-    "base_model_name_or_path": "nvidia/nemotron-3-nano-30b",
+    "base_model_name_or_path": "metric/nemotron-3-nano-30b-a3b-bf16/transformers/default",
     "peft_type": "LORA",
     "r": 32,
     "lora_alpha": 64,
