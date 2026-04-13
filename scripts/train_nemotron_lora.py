@@ -57,7 +57,6 @@ def train():
         r=32,
         lora_alpha=64,
         target_modules=r".*\.(in_proj|out_proj|up_proj|down_proj)$",
-
         lora_dropout=0.05,
         bias="none",
         task_type=TaskType.CAUSAL_LM,
@@ -74,7 +73,6 @@ def train():
         "r": 32,
         "lora_alpha": 64,
         "target_modules": r".*\.(in_proj|out_proj|up_proj|down_proj)$",
-
         "fan_in_fan_out": False,
         "bias": "none",
         "modules_to_save": None,
@@ -86,8 +84,12 @@ def train():
     # Use zero weights for all 52 layers to avoid corrupting base model performance
     dummy_weights = {}
     for i in range(52):
-        dummy_weights[f"base_model.model.model.layers.{i}.self_attn.in_proj.lora_A.weight"] = torch.zeros((32, 4096))
-        dummy_weights[f"base_model.model.model.layers.{i}.self_attn.in_proj.lora_B.weight"] = torch.zeros((4096, 32))
+        dummy_weights[
+            f"base_model.model.model.layers.{i}.self_attn.in_proj.lora_A.weight"
+        ] = torch.zeros((32, 4096))
+        dummy_weights[
+            f"base_model.model.model.layers.{i}.self_attn.in_proj.lora_B.weight"
+        ] = torch.zeros((4096, 32))
 
     try:
         from safetensors.torch import save_file
